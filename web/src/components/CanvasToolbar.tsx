@@ -1,0 +1,112 @@
+import { ArrowDown, ArrowRight, ArrowRightLeft, GitFork, Layers } from 'lucide-react';
+import type { EdgeMode, LayoutDirection } from '../types';
+import { cn } from '../cn';
+
+interface CanvasToolbarProps {
+  edgeMode: EdgeMode;
+  direction: LayoutDirection;
+  showImpacted: boolean;
+  changedCount: number;
+  impactedCount: number;
+  onEdgeModeChange: (mode: EdgeMode) => void;
+  onDirectionChange: (direction: LayoutDirection) => void;
+  onToggleImpacted: () => void;
+}
+
+export function CanvasToolbar({
+  edgeMode,
+  direction,
+  showImpacted,
+  changedCount,
+  impactedCount,
+  onEdgeModeChange,
+  onDirectionChange,
+  onToggleImpacted,
+}: CanvasToolbarProps) {
+  return (
+    <div className="absolute left-3.5 top-3.5 z-20 flex items-center gap-1 rounded-xl border border-line/90 bg-ink-850/90 p-1 shadow-[0_14px_30px_-24px_rgba(60,50,30,0.35)] backdrop-blur-md">
+      <div className="flex items-center rounded-lg bg-ink-900/70 p-0.5">
+        <button
+          type="button"
+          onClick={() => onEdgeModeChange('impact')}
+          className={cn(
+            'flex h-7 items-center gap-1.5 rounded-md px-2 text-[10.5px] transition',
+            edgeMode === 'impact' ? 'bg-accent-soft text-accent-bright' : 'text-mist-500 hover:text-mist-200',
+          )}
+          title="影响流向：变更文件 → 受影响文件；改动文件之间显示上游 → 下游的 Review 顺序"
+        >
+          <ArrowRightLeft size={11.5} />
+          影响流向
+        </button>
+        <button
+          type="button"
+          onClick={() => onEdgeModeChange('dependency')}
+          className={cn(
+            'flex h-7 items-center gap-1.5 rounded-md px-2 text-[10.5px] transition',
+            edgeMode === 'dependency' ? 'bg-accent-soft text-accent-bright' : 'text-mist-500 hover:text-mist-200',
+          )}
+          title="依赖流向：A → B 表示 A imports B"
+        >
+          <GitFork size={11.5} />
+          依赖流向
+        </button>
+      </div>
+
+      <div className="mx-0.5 h-4 w-px bg-line" />
+
+      <div className="flex items-center rounded-lg p-0.5">
+        <button
+          type="button"
+          onClick={() => onDirectionChange('LR')}
+          className={cn(
+            'flex h-7 w-7 items-center justify-center rounded-md transition',
+            direction === 'LR' ? 'bg-ink-750 text-mist-100' : 'text-mist-600 hover:text-mist-300',
+          )}
+          title="横向布局"
+        >
+          <ArrowRight size={13} />
+        </button>
+        <button
+          type="button"
+          onClick={() => onDirectionChange('TB')}
+          className={cn(
+            'flex h-7 w-7 items-center justify-center rounded-md transition',
+            direction === 'TB' ? 'bg-ink-750 text-mist-100' : 'text-mist-600 hover:text-mist-300',
+          )}
+          title="纵向布局"
+        >
+          <ArrowDown size={13} />
+        </button>
+      </div>
+
+      <div className="mx-0.5 h-4 w-px bg-line" />
+
+      <button
+        type="button"
+        onClick={onToggleImpacted}
+        className={cn(
+          'flex h-7 items-center gap-1.5 rounded-md px-2 text-[10.5px] transition',
+          showImpacted ? 'text-mist-300' : 'text-mist-600',
+        )}
+        title={showImpacted ? '隐藏受影响文件' : '显示受影响文件'}
+      >
+        <Layers size={11.5} className={showImpacted ? 'text-accent' : ''} />
+        受影响
+        <span className="font-mono text-[9px] text-mist-600">{showImpacted ? impactedCount : `${changedCount}`}</span>
+        <span
+          className={cn(
+            'relative ml-0.5 h-3 w-[18px] rounded-full transition',
+            showImpacted ? 'bg-accent/60' : 'bg-ink-750',
+          )}
+        >
+          <span
+            className={cn(
+              'absolute top-[2px] h-2 w-2 rounded-full bg-white transition-all',
+              showImpacted ? 'left-[9px]' : 'left-[2px]',
+            )}
+          />
+        </span>
+      </button>
+    </div>
+  );
+}

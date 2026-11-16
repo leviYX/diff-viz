@@ -185,6 +185,7 @@ node "$SKILL_DIR/bin/diff-viz.mjs" annotate \
 - JS / TS / JSX / TSX / Vue / Svelte：`import`、`export from`、`require()`、动态 `import()`。
 - Python：`import`、`from ... import`、相对 import。
 - Go：单行/块状 import，基于 `go.mod` module 前缀解析本地包。
+- Java：`import`、`import static`、包通配符 import，以及同包类引用；按 `package` + 文件名解析 FQCN，适配 Maven/Gradle 目录。
 - 其他文件仍会作为变更节点展示，只是没有依赖边。
 
 ## 故障排查

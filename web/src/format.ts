@@ -38,6 +38,7 @@ const HIGHLIGHT_LANGUAGE: Record<string, string | undefined> = {
   jsx: 'jsx',
   python: 'python',
   go: 'go',
+  java: 'java',
   json: 'json',
   markdown: 'markdown',
   css: 'css',

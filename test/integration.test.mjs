@@ -22,6 +22,23 @@ function seedRepo() {
   write(dir, 'pkg/__init__.py', '');
   write(dir, 'pkg/base.py', 'VALUE = 1\n');
   write(dir, 'pkg/use.py', 'from pkg.base import VALUE\n\nresult = VALUE + 1\n');
+  write(dir, 'src/main/java/com/example/config/AppConfig.java', 'package com.example.config;\n\npublic final class AppConfig {\n  public static final int TTL = 3600;\n}\n');
+  write(dir, 'src/main/java/com/example/auth/TokenStore.java', 'package com.example.auth;\n\npublic class TokenStore {\n  public String issue() { return "token"; }\n}\n');
+  write(
+    dir,
+    'src/main/java/com/example/auth/JwtService.java',
+    'package com.example.auth;\n\nimport com.example.config.AppConfig;\n\npublic class JwtService {\n  private final TokenStore store = new TokenStore();\n  public int ttl() { return AppConfig.TTL; }\n  public String issue() { return store.issue(); }\n}\n',
+  );
+  write(
+    dir,
+    'src/main/java/com/example/auth/AuthGuard.java',
+    'package com.example.auth;\n\npublic class AuthGuard {\n  private final JwtService service = new JwtService();\n  public boolean allow(String token) { return service.issue() != null; }\n}\n',
+  );
+  write(
+    dir,
+    'src/main/java/com/example/api/Routes.java',
+    'package com.example.api;\n\nimport com.example.auth.AuthGuard;\n\npublic class Routes {\n  private final AuthGuard guard = new AuthGuard();\n  public boolean check(String token) { return guard.allow(token); }\n}\n',
+  );
   write(dir, 'go.mod', 'module example.com/demo\n\ngo 1.22\n');
   write(dir, 'internal/b/b.go', 'package b\n\nconst Name = "b"\n');
   write(
@@ -41,6 +58,11 @@ test('builds dependency graph, impact depth, edges and todos', () => {
     write(dir, 'internal/b/b.go', 'package b\n\nconst Name = "b2"\n');
     write(dir, 'src/new.ts', '// FIXME: remove debug\nconsole.log("new");\n');
     write(dir, 'packages/ui/src/index.ts', 'export const ui = "v2";\n');
+    write(
+      dir,
+      'src/main/java/com/example/auth/JwtService.java',
+      'package com.example.auth;\n\nimport com.example.config.AppConfig;\n\npublic class JwtService {\n  private final TokenStore store = new TokenStore();\n  public int ttl() { return AppConfig.TTL; }\n  public String issue() { return store.issue(); }\n  public String refresh() { return issue(); }\n}\n',
+    );
 
     const repo = new GitRepo(dir);
     const data = buildReviewData(repo, { untracked: true, impactDepth: 3 });
@@ -62,6 +84,10 @@ test('builds dependency graph, impact depth, edges and todos', () => {
     assert.equal(byPath.get('internal/a/a.go').status, 'impacted_only');
     assert.equal(byPath.get('src/consumer.ts').status, 'impacted_only');
     assert.equal(byPath.get('src/consumer.ts').depth, 1);
+    assert.equal(byPath.get('src/main/java/com/example/auth/AuthGuard.java').status, 'impacted_only');
+    assert.equal(byPath.get('src/main/java/com/example/auth/AuthGuard.java').depth, 1);
+    assert.equal(byPath.get('src/main/java/com/example/api/Routes.java').status, 'impacted_only');
+    assert.equal(byPath.get('src/main/java/com/example/api/Routes.java').depth, 2);
 
     const edge = data.edges.find((item) => item.source === 'src/app.ts' && item.target === 'src/util.ts');
     assert.ok(edge, 'app imports util edge should exist');
@@ -76,6 +102,26 @@ test('builds dependency graph, impact depth, edges and todos', () => {
     assert.ok(byPath.get('src/util.ts').importedBy.includes('src/app.ts'));
     assert.ok(byPath.get('src/app.ts').imports.includes('src/util.ts'));
 
+    const jwtServicePath = 'src/main/java/com/example/auth/JwtService.java';
+    assert.ok(
+      data.edges.some(
+        (item) =>
+          item.source === 'src/main/java/com/example/auth/AuthGuard.java' &&
+          item.target === jwtServicePath,
+      ),
+      'Java same-package reference edge should exist',
+    );
+    assert.ok(
+      data.edges.some(
+        (item) =>
+          item.source === 'src/main/java/com/example/api/Routes.java' &&
+          item.target === 'src/main/java/com/example/auth/AuthGuard.java',
+      ),
+      'Java import edge should exist',
+    );
+    assert.ok(byPath.get(jwtServicePath).imports.includes('src/main/java/com/example/config/AppConfig.java'));
+    assert.ok(byPath.get(jwtServicePath).imports.includes('src/main/java/com/example/auth/TokenStore.java'));
+
     const todos = byPath.get('src/util.ts').todos;
     assert.equal(todos.length, 1);
     assert.match(todos[0].text, /TODO/);
@@ -83,10 +129,10 @@ test('builds dependency graph, impact depth, edges and todos', () => {
     const newTodo = byPath.get('src/new.ts').todos[0];
     assert.equal(newTodo.severity, 'high');
 
-    assert.equal(data.meta.reviewOrder.length, 5);
+    assert.equal(data.meta.reviewOrder.length, 6);
     assert.ok(data.meta.reviewOrder.includes('src/new.ts'));
     assert.ok(data.meta.reviewOrder.includes('src/util.ts'));
-    assert.ok(data.meta.stats.impactedFiles >= 5);
+    assert.ok(data.meta.stats.impactedFiles >= 7);
   } finally {
     cleanup(dir);
   }

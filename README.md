@@ -20,7 +20,7 @@
 ## 功能
 
 - **变更提取**：工作区（暂存 + 未暂存）、暂存区、最近一次提交、commit range、与目标分支对比。
-- **依赖拓扑**：静态解析 JS/TS（含 `tsconfig` 的 `baseUrl` / `paths` 别名）、Python、Go 的 import，构建 Nodes / Edges。
+- **依赖拓扑**：静态解析 JS/TS（含 `tsconfig` 的 `baseUrl` / `paths` 别名）、Python、Go、Java 的 import，构建 Nodes / Edges。
 - **状态区分**：新增（绿）、修改（黄）、删除（红）、受影响但未改动（灰色虚线）。
 - **Review 流程**：按依赖顺序给出 reviewOrder，`←` / `→` 逐个文件切换，标记已 Review。
 - **三段式详情**：改动摘要与影响评估、Side-by-Side / Unified 代码 Diff（语法高亮）、待确认 TODO 列表。
@@ -147,7 +147,7 @@ node bin/diff-viz.mjs annotate \
 ```json
 {
   "meta": {
-    "overallSummary": "本次改动重构了 refresh token 轮换逻辑，并同步调整了 TS/Python/Go 三端调用。"
+    "overallSummary": "本次改动重构了 refresh token 轮换逻辑，并同步调整了 TS/Python/Go/Java 四端调用。"
   },
   "nodes": {
     "src/auth/jwt.ts": {
@@ -232,6 +232,7 @@ node bin/diff-viz.mjs annotate \
 | JS / TS / JSX / TSX / Vue / Svelte | `import`、`export ... from`、`require()`、动态 `import()` | 相对路径、`tsconfig.json` / `jsconfig.json` 的 `baseUrl`、`paths`、`index.*`、`.js` → `.ts` |
 | Python | `import a.b`、`from a.b import x`、相对 import | 仓库根目录与 `src/`，`module.py` / `module/__init__.py` |
 | Go | `import "..."`、import block | `go.mod` 的 module 前缀 → 目录下的 `.go` 文件 |
+| Java | `import com.foo.Bar;`、`import static ...`、`import com.foo.*`、同包类引用 | 按 `package` + 文件名建立 FQCN 索引，支持 Maven/Gradle 的 `src/main/java`、多模块目录 |
 
 影响分析从每个变更文件出发，沿 `被 import` 的反向关系寻找下游文件，最多 `--impact-depth` 层、`--max-impact` 个节点。只展示仓库内文件；`node_modules`、`vendor`、`dist` 等目录会被跳过。
 
@@ -251,7 +252,7 @@ diff-viz/
 │   ├── cli.mjs             # 参数解析与命令
 │   ├── collect.mjs         # diff → 依赖图 → 数据文件
 │   ├── diff-parse.mjs      # unified diff 解析 / TODO 扫描
-│   ├── deps.mjs            # JS/TS、Python、Go import 解析
+│   ├── deps.mjs            # JS/TS、Python、Go、Java import 解析
 │   ├── git.mjs             # Git 命令封装
 │   ├── server.mjs          # 本地 HTTP 服务与状态写回
 │   └── util.mjs
@@ -277,7 +278,7 @@ npm run demo        # 创建 .demo 演示仓库并启动界面
 
 ## 限制
 
-- 依赖解析是**静态正则/AST 近似**，不执行代码，也不解析运行时动态路径；别名只读取仓库根目录的 tsconfig/jsconfig。
+- 依赖解析是**静态正则/AST 近似**，不执行代码，也不解析运行时动态路径；别名只读取仓库根目录的 tsconfig/jsconfig。Java 同包引用通过标识符近似匹配，注释/字符串中的同名类名可能产生少量误报。
 - 大型 monorepo 超过 15,000 个代码文件时只扫描前 15,000 个，并在 `meta.warnings` 中提示。
 - 二进制文件只标记状态，不渲染文本 Diff。
 - 不监听文件变化；代码变更后需要重新运行（或点界面刷新读取新 JSON）。

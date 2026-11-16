@@ -5,6 +5,7 @@ const LABELS: Record<string, string> = {
   jsx: 'JSX',
   python: 'Python',
   go: 'Go',
+  java: 'Java',
   json: 'JSON',
   markdown: 'Markdown',
   css: 'CSS',

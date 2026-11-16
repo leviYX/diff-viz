@@ -425,6 +425,7 @@ export function buildReviewData(repo, options = {}) {
     tsconfig: scan.tsconfig,
     goModule: scan.goModule,
     workspacePackages: scan.workspacePackages,
+    javaIndex: scan.javaIndex,
     oldPathAliases,
   });
 
@@ -436,6 +437,9 @@ export function buildReviewData(repo, options = {}) {
       for (const target of resolver.resolve(filePath, imp)) {
         if (target && target !== filePath) targets.add(target);
       }
+    }
+    for (const target of entry.javaSamePackageTargets || []) {
+      if (target && target !== filePath) targets.add(target);
     }
     resolvedImports.set(filePath, targets);
     for (const target of targets) {

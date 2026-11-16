@@ -6,6 +6,7 @@ const JS_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.c
 const JS_EXTENSION_SET = new Set(JS_EXTENSIONS);
 const PY_EXTENSION_SET = new Set(['.py']);
 const GO_EXTENSION_SET = new Set(['.go']);
+const JAVA_EXTENSION_SET = new Set(['.java']);
 
 const SKIP_DIRS = new Set([
   '.git',
@@ -62,6 +63,8 @@ export function languageOf(filePath) {
       return 'python';
     case '.go':
       return 'go';
+    case '.java':
+      return 'java';
     case '.json':
       return 'json';
     case '.md':
@@ -91,7 +94,12 @@ export function languageOf(filePath) {
 
 export function isCodeFile(filePath) {
   const ext = extensionOf(filePath);
-  return JS_EXTENSION_SET.has(ext) || PY_EXTENSION_SET.has(ext) || GO_EXTENSION_SET.has(ext);
+  return (
+    JS_EXTENSION_SET.has(ext) ||
+    PY_EXTENSION_SET.has(ext) ||
+    GO_EXTENSION_SET.has(ext) ||
+    JAVA_EXTENSION_SET.has(ext)
+  );
 }
 
 function isSkippedPath(filePath) {
@@ -285,11 +293,32 @@ export function extractGoImports(source) {
   return specs;
 }
 
+export function extractJavaPackage(source) {
+  const match = /^[ \t]*package[ \t]+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)[ \t]*;/m.exec(source);
+  return match ? match[1] : '';
+}
+
+export function extractJavaImports(source) {
+  const imports = [];
+  const re = /^[ \t]*import[ \t]+(static[ \t]+)?([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)(\.[ \t]*\*)?[ \t]*;/gm;
+  let match;
+  while ((match = re.exec(source)) !== null) {
+    imports.push({
+      kind: 'java-import',
+      name: match[2],
+      static: Boolean(match[1]),
+      wildcard: Boolean(match[3]),
+    });
+  }
+  return imports;
+}
+
 export function extractImports(filePath, source) {
   const ext = extensionOf(filePath);
   if (JS_EXTENSION_SET.has(ext)) return extractJsImports(source);
   if (PY_EXTENSION_SET.has(ext)) return extractPythonImports(source);
   if (GO_EXTENSION_SET.has(ext)) return extractGoImports(source);
+  if (JAVA_EXTENSION_SET.has(ext)) return extractJavaImports(source);
   return [];
 }
 
@@ -412,7 +441,19 @@ function joinPosix(...parts) {
   return joined === '.' ? '' : joined.replace(/^\.\//, '');
 }
 
-export function createResolver({ root, fileSet, tsconfig, goModule, workspacePackages = new Map(), oldPathAliases = new Map() }) {
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+export function createResolver({
+  root,
+  fileSet,
+  tsconfig,
+  goModule,
+  workspacePackages = new Map(),
+  javaIndex = { classes: new Map(), packages: new Map() },
+  oldPathAliases = new Map(),
+}) {
   const pythonRoots = ['', 'src', 'lib'].filter((prefix) => {
     if (!prefix) return true;
     try {
@@ -574,6 +615,40 @@ export function createResolver({ root, fileSet, tsconfig, goModule, workspacePac
     return [...targets];
   }
 
+  function resolveJava(imp) {
+    const classes = javaIndex.classes;
+    const packages = javaIndex.packages;
+    if (!classes || classes.size === 0) return [];
+
+    if (imp.wildcard) {
+      // `import static com.foo.Util.*` and `import com.foo.Outer.*` both name
+      // a class; a plain package wildcard names a package.
+      let className = imp.name;
+      while (className.includes('.')) {
+        if (classes.has(className)) return [classes.get(className)];
+        className = className.slice(0, className.lastIndexOf('.'));
+      }
+      if (classes.has(className)) return [classes.get(className)];
+      if (!imp.static) {
+        const packageFiles = packages.get(imp.name);
+        if (packageFiles?.length) {
+          return packageFiles.slice(0, 40);
+        }
+      }
+      return [];
+    }
+
+    // Normal imports and static member imports: strip member segments until a
+    // known class or inner class is found.
+    let name = imp.name;
+    while (name.includes('.')) {
+      if (classes.has(name)) return [classes.get(name)];
+      name = name.slice(0, name.lastIndexOf('.'));
+    }
+    if (classes.has(name)) return [classes.get(name)];
+    return [];
+  }
+
   function resolveGo(spec) {
     if (!goModule) return [];
     const module = goModule.module;
@@ -594,6 +669,7 @@ export function createResolver({ root, fileSet, tsconfig, goModule, workspacePac
     }
     if (PY_EXTENSION_SET.has(ext)) return resolvePython(fromPath, imp);
     if (GO_EXTENSION_SET.has(ext)) return resolveGo(imp.spec);
+    if (JAVA_EXTENSION_SET.has(ext)) return resolveJava(imp);
     return [];
   }
 
@@ -651,7 +727,42 @@ export function scanRepository(repo, { includeUntracked = true, maxFiles = MAX_S
     let source = buffer.toString('utf8');
     // Avoid pathological regex scans over generated bundles.
     if (source.length > MAX_SOURCE_BYTES) source = source.slice(0, MAX_SOURCE_BYTES);
-    files.set(filePath, { imports: extractImports(filePath, source) });
+    const entry = { imports: extractImports(filePath, source) };
+    if (JAVA_EXTENSION_SET.has(path.extname(filePath).toLowerCase())) {
+      entry.javaPackage = extractJavaPackage(source);
+      entry.javaText = source;
+    }
+    files.set(filePath, entry);
+  }
+
+  const javaIndex = { classes: new Map(), packages: new Map() };
+  for (const [filePath, entry] of files) {
+    if (!filePath.endsWith('.java')) continue;
+    const fileName = path.posix.basename(filePath);
+    const className = fileName.replace(/\.java$/i, '');
+    if (className === 'package-info' || className === 'module-info') continue;
+    const packageName = entry.javaPackage || '';
+    const fqcn = packageName ? `${packageName}.${className}` : className;
+    javaIndex.classes.set(fqcn, filePath);
+    if (!javaIndex.packages.has(packageName)) javaIndex.packages.set(packageName, []);
+    javaIndex.packages.get(packageName).push(filePath);
+  }
+
+  for (const [filePath, entry] of files) {
+    if (!entry.javaText) continue;
+    const packageName = entry.javaPackage || '';
+    const selfName = path.posix.basename(filePath).replace(/\.java$/i, '');
+    const samePackage = [];
+    for (const sibling of javaIndex.packages.get(packageName) || []) {
+      if (sibling === filePath) continue;
+      const simpleName = path.posix.basename(sibling).replace(/\.java$/i, '');
+      if (simpleName === selfName) continue;
+      if (new RegExp(`\\b${escapeRegExp(simpleName)}\\b`).test(entry.javaText)) {
+        samePackage.push(sibling);
+      }
+    }
+    entry.javaSamePackageTargets = samePackage.slice(0, 40);
+    delete entry.javaText;
   }
 
   if (skippedLarge > 0) warnings.push(`${skippedLarge} large code files were skipped during dependency scan.`);
@@ -661,6 +772,7 @@ export function scanRepository(repo, { includeUntracked = true, maxFiles = MAX_S
     tsconfig,
     goModule,
     workspacePackages,
+    javaIndex,
     warnings,
     stats: {
       trackedFiles: allFiles.length,

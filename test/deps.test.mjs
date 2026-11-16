@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractGoImports, extractJsImports, extractPythonImports } from '../src/deps.mjs';
+import {
+  extractGoImports,
+  extractJavaImports,
+  extractJavaPackage,
+  extractJsImports,
+  extractPythonImports,
+} from '../src/deps.mjs';
 
 test('extracts JS/TS import forms without duplicates', () => {
   const source = `
@@ -73,5 +79,31 @@ func main() { fmt.Println(alias.Name, config.Port) }
   assert.deepEqual(
     imports.map((item) => item.spec),
     ['fmt', 'example.com/app/internal/auth', 'embed', 'example.com/app/internal/config'],
+  );
+});
+
+test('extracts Java package, imports and static wildcards', () => {
+  const source = `package com.example.auth;
+
+import com.example.config.AppConfig;
+import static com.example.util.Checks.*;
+import com.example.model.*;
+import com.example.auth.JwtService.Inner;
+import java.util.List;
+
+public class JwtService {}
+`;
+  assert.equal(extractJavaPackage(source), 'com.example.auth');
+  const imports = extractJavaImports(source);
+  assert.equal(imports.length, 5);
+  assert.deepEqual(
+    imports.map((item) => [item.name, item.static, item.wildcard]),
+    [
+      ['com.example.config.AppConfig', false, false],
+      ['com.example.util.Checks', true, true],
+      ['com.example.model', false, true],
+      ['com.example.auth.JwtService.Inner', false, false],
+      ['java.util.List', false, false],
+    ],
   );
 });

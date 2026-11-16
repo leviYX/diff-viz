@@ -15,6 +15,7 @@
     "scripts",
     "SKILL.md",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
@@ -23,7 +24,8 @@
     "test": "node --test test/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "demo": "node scripts/demo.mjs",
-    "package:skill": "node scripts/build-skill-package.mjs"
+    "package:skill": "node scripts/build-skill-package.mjs",
+    "release:check": "node scripts/check-changelog.mjs"
   },
   "engines": {
     "node": ">=20"

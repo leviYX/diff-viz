@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/mdhUser/diff-viz/actions/workflows/ci.yml/badge.svg)](https://github.com/mdhUser/diff-viz/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[更新日志](CHANGELOG.md)
 
 本地运行的代码变更可视化 Review 工具：读取 Git diff，静态解析文件依赖，生成可交互的变更拓扑图，并启动一个常驻本地 hub 查看改动摘要、代码 Diff 与待确认事项。hub 可复用、可切换仓库、可浏览历史提交。
 
@@ -23,6 +24,8 @@
 - **依赖拓扑**：静态解析 JS/TS（含 `tsconfig` 的 `baseUrl` / `paths` 别名）、Python、Go、Java 的 import，构建 Nodes / Edges。
 - **状态区分**：新增（绿）、修改（黄）、删除（红）、受影响但未改动（灰色虚线）。
 - **Review 流程**：按依赖顺序给出 reviewOrder，`←` / `→` 逐个文件切换，标记已 Review。
+- **版本链条**：提交 DAG、分支/tag/merge 车道，点击历史 commit 查看当时的 Diff 与拓扑。
+- **界面体验**：柔和亮色主题、可拖拽左右面板、缩放/小地图、键盘导航。
 - **三段式详情**：改动摘要与影响评估、Side-by-Side / Unified 代码 Diff（语法高亮）、待确认 TODO 列表。
 - **Agent 注解**：Agent 可把自己的总结、影响分析、风险点写入 JSON；界面直接展示并支持勾选确认。
 - **单 hub 复用**：多个仓库、多次分析共用一个常驻进程，不再为每次 Review 启动新端口。
@@ -294,6 +297,7 @@ diff-viz/
 ├── test/                   # node:test 测试
 ├── scripts/demo.mjs        # 生成演示仓库并启动
 ├── SKILL.md                # Agent Skill 说明
+├── CHANGELOG.md            # 版本变更记录
 └── README.md
 ```
 
@@ -304,10 +308,46 @@ npm install
 npm run build
 npm test
 npm run typecheck
-npm run demo        # 创建 .demo 演示仓库并启动界面
+npm run release:check   # 校验当前版本在 CHANGELOG.md 中有发布说明
+npm run demo            # 创建 .demo 演示仓库并启动界面
+npm run package:skill   # 生成 release/diff-viz-skill.zip
 ```
 
 前端技术栈：React 18、Vite、Tailwind CSS v4、`@xyflow/react`、`dagre`、`react-diff-viewer-continued`、`lucide-react`。
+
+## 发布新版本
+
+发布流程（详细说明见 [CHANGELOG.md](CHANGELOG.md)）：
+
+1. 在 `CHANGELOG.md` 的 `## [Unreleased]` 下写清楚本版本的 **Added / Changed / Fixed**；只写 feature 名称不够，要说明用户能感知到什么。
+2. 把 `Unreleased` 改成新版本号，并补上日期。
+3. 更新 `package.json` 版本：
+
+   ```bash
+   npm version 0.5.0 --no-git-tag-version
+   npm run release:check
+   ```
+
+4. 构建并打包 skill：
+
+   ```bash
+   npm run build
+   npm run package:skill
+   ```
+
+5. 提交、打 tag、推送：
+
+   ```bash
+   git add -A
+   git commit -m "Release v0.5.0"
+   git tag -a v0.5.0 -m "v0.5.0"
+   git push origin main --tags
+   ```
+
+6. 在 GitHub `Releases` 创建对应 tag 的 release，**把 CHANGELOG 里该版本的内容复制到 release notes**，并上传 `release/diff-viz-skill.zip` 作为 asset。
+7. 确认 CI 通过、Release 页面能下载 asset。
+
+`npm run release:check` 已接入 CI：版本号在 CHANGELOG 中缺失或内容过少时，CI 会失败。
 
 ## 限制
 
@@ -316,6 +356,17 @@ npm run demo        # 创建 .demo 演示仓库并启动界面
 - 二进制文件只标记状态，不渲染文本 Diff。
 - 不监听文件变化；代码变更后需要重新运行（或点界面刷新读取新 JSON）。
 - 数据文件包含完整源码内容，**不要提交到 Git 或分享**。
+
+## 最近版本
+
+| 版本 | 主要内容 |
+| --- | --- |
+| `v0.4.0` | 版本链条、分支/tag/merge 图、历史 commit Review |
+| `v0.3.0` | 单 hub 复用、仓库切换、历史提交、后台进程管理 |
+| `v0.2.0` | Java 服务依赖解析、同包引用、Java 高亮 |
+| `v0.1.0` | 初始版本：CLI、依赖拓扑、Diff、TODO、Agent Skill |
+
+完整记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 打赏作者
 

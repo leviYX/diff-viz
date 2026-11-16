@@ -3,7 +3,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findRepoRoot, GitRepo } from './git.mjs';
 import { applyAnnotations, buildReviewData, mergePreviousState } from './collect.mjs';
-import { startServer } from './server.mjs';
+import { ensureHub, hubIsAlive, readHubInfo, startHub, stopHub } from './hub.mjs';
+import { openInBrowser } from './server.mjs';
 import { readJsonSafe, writeJsonAtomic } from './util.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -13,9 +14,11 @@ const HELP = `
 diff-viz · 本地代码变更可视化 Review 工具
 
 用法:
-  diff-viz [review] [选项]           分析 Git 变更并打开可视化界面
-  diff-viz serve [选项]              使用已有数据启动界面
+  diff-viz [review] [选项]           分析 Git 变更并注册到本地 hub
+  diff-viz serve [选项]              把已有数据注册到 hub 并打开
   diff-viz annotate [选项]           将 Agent/人工总结合并进数据文件
+  diff-viz hub [选项]                前台启动常驻 hub（只启动一次）
+  diff-viz stop                      停止本地 hub
 
 范围 (默认: 工作区有改动则看工作区，否则看最近一次提交):
   --staged                仅查看已暂存 (git diff --cached)
@@ -28,7 +31,7 @@ diff-viz · 本地代码变更可视化 Review 工具
   --annotations <file>    生成时合并注解文件 (JSON，见 SKILL.md)
   --summary <text>        覆盖整体摘要
   --json-only             仅生成 JSON，不启动界面
-  --port <n>              端口 (默认 5173，被占用时自动 +1)
+  --port <n>              hub 端口 (默认 5173，被占用时自动 +1)
   --host <addr>           监听地址 (默认 127.0.0.1)
   --no-open               不自动打开浏览器
 
@@ -78,7 +81,7 @@ export function parseArgs(argv) {
   const options = { command: 'review' };
   let index = 0;
   if (argv[0] && !argv[0].startsWith('-')) {
-    if (!['review', 'serve', 'annotate'].includes(argv[0])) {
+    if (!['review', 'serve', 'annotate', 'hub', 'stop'].includes(argv[0])) {
       throw new Error(`未知命令：${argv[0]}`);
     }
     options.command = argv[0];
@@ -157,6 +160,30 @@ function printSummary(data, dataPath) {
   process.stdout.write(`  数据        ${dataPath}\n`);
 }
 
+async function uploadReview(hubUrl, { root, data, reviewId }) {
+  let response;
+  try {
+    response = await fetch(new URL('api/import', hubUrl), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ root, data, reviewId }),
+    });
+  } catch (error) {
+    throw new Error(`无法连接 diff-viz hub：${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`;
+    try {
+      const payload = await response.json();
+      if (payload?.error) detail = payload.error;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(`注册 Review 到 hub 失败：${detail}`);
+  }
+  return response.json();
+}
+
 async function keepAlive(server) {
   await new Promise((resolve) => {
     const shutdown = async () => {
@@ -182,6 +209,29 @@ export async function main(argv = process.argv.slice(2)) {
     return;
   }
 
+  if (options.command === 'hub') {
+    const existing = readHubInfo();
+    if (existing && (await hubIsAlive(existing))) {
+      const infoHost = existing.host === '0.0.0.0' || existing.host === '::' ? '127.0.0.1' : existing.host;
+      process.stdout.write(`hub 已在运行：http://${infoHost}:${existing.port}/\n`);
+      return;
+    }
+    const server = await startHub({
+      port: Number(options.port) || 5173,
+      host: options.host || '127.0.0.1',
+      open: !options.noOpen && !process.env.CI,
+      quiet: options.quiet,
+    });
+    await keepAlive(server);
+    return;
+  }
+
+  if (options.command === 'stop') {
+    const result = await stopHub();
+    process.stdout.write(result.stopped ? `✔ 已停止 hub（pid ${result.pid}）\n` : '没有发现正在运行的 hub。\n');
+    return;
+  }
+
   if (options.command === 'annotate') {
     if (!options.annotations) throw new Error('annotate 需要 --annotations <file|->。');
     const repo = repoFromOptions(options);
@@ -193,26 +243,49 @@ export async function main(argv = process.argv.slice(2)) {
     if (options.summary) data.meta.overallSummary = options.summary;
     data.meta.updatedAt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
     writeJsonAtomic(dataPath, data);
+    const hub = readHubInfo();
+    if (hub && (await hubIsAlive(hub))) {
+      const hubHost = hub.host === '0.0.0.0' || hub.host === '::' ? '127.0.0.1' : hub.host;
+      try {
+        await uploadReview(`http://${hubHost}:${hub.port}/`, {
+          root: repo.root,
+          data,
+          reviewId: data.meta?.reviewId,
+        });
+        process.stdout.write(`  ↳ 已同步到运行中的 hub\n`);
+      } catch (error) {
+        process.stdout.write(`  ! 注解已写入本地，但同步 hub 失败：${error instanceof Error ? error.message : String(error)}\n`);
+      }
+    }
     const annotated = data.nodes.filter((node) => node.summarySource === 'agent' || (node.todos || []).some((todo) => todo.source === 'agent')).length;
     process.stdout.write(`✔ 已合并注解：${annotated} 个节点 · ${dataPath}\n`);
     return;
   }
 
   if (options.command === 'serve') {
+    const repo = repoFromOptions(options);
     const dataPath = options.data
       ? path.resolve(process.cwd(), options.data)
-      : dataPathFor(repoFromOptions(options), options);
+      : dataPathFor(repo, options);
     if (!fs.existsSync(dataPath)) {
       throw new Error(`找不到数据文件：${dataPath}，请先运行 diff-viz。`);
     }
-    const server = await startServer({
-      dataPath,
+    const data = readJsonSafe(dataPath);
+    if (!data) throw new Error(`数据文件不是合法 JSON：${dataPath}`);
+    const hub = await ensureHub({
       port: Number(options.port) || 5173,
       host: options.host || '127.0.0.1',
-      open: !options.noOpen && !process.env.CI,
-      quiet: options.quiet,
     });
-    await keepAlive(server);
+    const imported = await uploadReview(hub.url, {
+      root: repo.root,
+      data,
+      reviewId: data.meta?.reviewId,
+    });
+    data.meta.reviewId = imported.reviewId;
+    writeJsonAtomic(dataPath, data);
+    const reviewUrl = new URL(imported.url, hub.url).toString();
+    if (!options.noOpen && !process.env.CI) openInBrowser(reviewUrl);
+    process.stdout.write(`\n  Review UI  ${reviewUrl}\n  Hub        ${hub.url}\n\n`);
     return;
   }
 
@@ -260,12 +333,25 @@ export async function main(argv = process.argv.slice(2)) {
     return;
   }
 
-  const server = await startServer({
-    dataPath,
+  const hub = await ensureHub({
     port: Number(options.port) || 5173,
     host: options.host || '127.0.0.1',
-    open: !options.noOpen && !process.env.CI,
-    quiet: options.quiet,
   });
-  await keepAlive(server);
+  const imported = await uploadReview(hub.url, {
+    root: repo.root,
+    data,
+    reviewId: data.meta?.reviewId,
+  });
+  data.meta.reviewId = imported.reviewId;
+  data.meta.projectId = imported.project?.id ?? data.meta.projectId;
+  writeJsonAtomic(dataPath, data);
+  const reviewUrl = new URL(imported.url, hub.url).toString();
+
+  if (options.quiet) {
+    process.stdout.write(`${reviewUrl}\n`);
+  } else {
+    process.stdout.write(`\n  Review UI  ${reviewUrl}\n`);
+    process.stdout.write(`  Hub        ${hub.url}${hub.started ? ' (已启动)' : ' (复用中)'}\n\n`);
+  }
+  if (!options.noOpen && !process.env.CI) openInBrowser(reviewUrl);
 }

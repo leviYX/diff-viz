@@ -55,7 +55,7 @@ ln -s /path/to/diff-viz .claude/skills/diff-viz
 review 一下当前改动，用 diff-viz 展示影响拓扑
 ```
 
-Claude Code 没有内置的交互式浏览器面板，通常会启动服务后把 URL 给你，由你在系统浏览器打开。若它不能常驻进程，可以让它只生成 JSON，再自行运行 `serve`。
+Claude Code 没有内置的交互式浏览器面板，CLI 会注册到常驻 hub 后立即退出，把 URL 给你，由你在系统浏览器打开。
 
 如果你的 Claude Code 版本不支持 Skills，也可以在 `CLAUDE.md` 中加：
 
@@ -102,7 +102,7 @@ After completing a code change, run:
 
 - Write `.diff-review-annotations.json` with `meta.overallSummary` and per-file
   `summary` / `impactAnalysis` / `todos` before running it.
-- The command prints a local URL; give it to the user (do not wait for the long-running server to exit).
+- The command registers the review with the local hub and exits after printing the URL.
 - `--json-only --quiet` prints machine-readable JSON if you need to inspect the graph yourself.
 - Never commit `.diff-review-data.json`; it contains full source content.
 ```

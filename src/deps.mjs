@@ -326,10 +326,11 @@ export function extractImports(filePath, source) {
 /* tsconfig path aliases                                               */
 /* ------------------------------------------------------------------ */
 
-function loadTsconfig(root) {
+function loadTsconfig(root, readFile = (name) => readText(path.join(root, name))) {
   for (const name of ['tsconfig.json', 'jsconfig.json']) {
-    const file = path.join(root, name);
-    const parsed = readJsonSafe(file) ?? parseJsonc(readText(file) ?? '');
+    const text = readFile(name);
+    if (!text) continue;
+    const parsed = parseJsonc(text);
     if (!parsed) continue;
     const options = parsed.compilerOptions ?? {};
     const baseUrl = options.baseUrl ? path.posix.normalize(toPosix(options.baseUrl)).replace(/\/$/, '') : '';
@@ -359,10 +360,9 @@ function readText(file) {
   }
 }
 
-function loadGoModule(root) {
-  for (const file of [path.join(root, 'go.mod')]) {
-    const text = readText(file);
-    if (!text) continue;
+function loadGoModule(root, readFile = (name) => readText(path.join(root, name))) {
+  const text = readFile('go.mod');
+  if (text) {
     const match = /^\s*module\s+(\S+)/m.exec(text);
     if (match) return { module: match[1].trim(), file: 'go.mod' };
   }
@@ -680,10 +680,23 @@ export function createResolver({
 /* repository scan                                                     */
 /* ------------------------------------------------------------------ */
 
-export function scanRepository(repo, { includeUntracked = true, maxFiles = MAX_SCAN_FILES } = {}) {
+export function scanRepository(repo, { includeUntracked = true, maxFiles = MAX_SCAN_FILES, gitRef = null } = {}) {
   const warnings = [];
-  const allFiles = repo.listFiles({ includeUntracked });
+  const allFiles = gitRef
+    ? repo.listFilesAt(gitRef)
+    : repo.listFiles({ includeUntracked });
   const absoluteRoot = repo.root;
+  const readTextAt = (relativePath) => {
+    try {
+      if (gitRef) {
+        const buffer = repo.show(gitRef, relativePath);
+        return buffer ? buffer.toString('utf8') : null;
+      }
+      return readText(path.join(absoluteRoot, relativePath));
+    } catch {
+      return null;
+    }
+  };
   const files = new Map();
   let skippedDir = 0;
   let skippedLarge = 0;
@@ -704,21 +717,30 @@ export function scanRepository(repo, { includeUntracked = true, maxFiles = MAX_S
     }
   }
 
-  const tsconfig = loadTsconfig(absoluteRoot);
-  const goModule = loadGoModule(absoluteRoot);
-  const workspacePackages = loadWorkspacePackages(absoluteRoot);
+  const tsconfig = loadTsconfig(absoluteRoot, readTextAt);
+  const goModule = loadGoModule(absoluteRoot, readTextAt);
+  const workspacePackages = gitRef ? new Map() : loadWorkspacePackages(absoluteRoot);
 
   for (const filePath of candidates) {
     let buffer;
-    try {
-      const stat = fs.statSync(path.join(absoluteRoot, filePath));
-      if (!stat.isFile() || stat.size > MAX_SOURCE_BYTES) {
+    if (gitRef) {
+      buffer = repo.show(gitRef, filePath);
+      if (!buffer) continue;
+      if (buffer.length > MAX_SOURCE_BYTES) {
         skippedLarge += 1;
         continue;
       }
-      buffer = fs.readFileSync(path.join(absoluteRoot, filePath));
-    } catch {
-      continue;
+    } else {
+      try {
+        const stat = fs.statSync(path.join(absoluteRoot, filePath));
+        if (!stat.isFile() || stat.size > MAX_SOURCE_BYTES) {
+          skippedLarge += 1;
+          continue;
+        }
+        buffer = fs.readFileSync(path.join(absoluteRoot, filePath));
+      } catch {
+        continue;
+      }
     }
     if (isProbablyBinary(buffer)) {
       skippedBinary += 1;

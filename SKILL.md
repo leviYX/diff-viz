@@ -82,9 +82,11 @@ node "$SKILL_DIR/bin/diff-viz.mjs" \
 
 - 默认分析工作区；工作区干净时自动看最近一次提交。
 - 需要指定范围时加 `--staged`、`--last`、`--range main..HEAD`、`--base main`。
-- CLI 会写 `.diff-review-data.json`、启动 `http://127.0.0.1:5173` 并自动打开浏览器。
-- 该命令是长驻进程。Agent 应以**后台任务**方式运行（例如 `nohup ... &` 或执行环境提供的 background job），从输出/日志中读取实际 URL（端口被占用时自动递增），不要等待命令退出。
+- CLI 会写 `.diff-review-data.json`，**确保/复用一个常驻 hub**，把本次 Review 注册进去，然后立即退出（不再为每次分析常驻一个进程）。
+- 不需要 `nohup`/后台任务；命令会正常结束并打印唯一 URL，直接把它给用户。
+- hub 默认在 `http://127.0.0.1:5173`（被占用自动递增）；后续分析复用它。需要停止时运行 `diff-viz stop`。
 - 如果执行环境不能打开浏览器，使用 `--no-open`，把 URL 告诉用户。
+- 界面的仓库名/历史按钮可以在已注册仓库之间切换，并查看最近 40 个历史提交的 Diff。
 
 ### 4. 汇报
 
@@ -112,6 +114,8 @@ stdout 是纯 JSON：
 node "$SKILL_DIR/bin/diff-viz.mjs" serve --data .diff-review-data.json --port 5173
 ```
 
+`serve` 会把该数据注册到正在运行的 hub，然后退出；不会新开端口。
+
 ## 追加/更新 Agent 注解（不重启服务）
 
 ```bash
@@ -121,6 +125,18 @@ node "$SKILL_DIR/bin/diff-viz.mjs" annotate \
 ```
 
 然后在浏览器点右上角刷新按钮。`annotate` 支持 `--annotations -` 从 stdin 读取。
+
+## hub 管理
+
+```bash
+# 前台启动/查看 hub
+node "$SKILL_DIR/bin/diff-viz.mjs" hub
+
+# 停止后台 hub
+node "$SKILL_DIR/bin/diff-viz.mjs" stop
+```
+
+hub 的状态目录默认是 `~/.diff-viz/`；Agent 沙箱不允许写 home 时会自动落到系统临时目录。也可以用 `DIFF_VIZ_HOME` 显式指定。
 
 ## 可选参数
 

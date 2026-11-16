@@ -103,6 +103,18 @@ export class GitRepo {
     return stdout.split('\0').filter(Boolean);
   }
 
+  listFilesAt(ref) {
+    const { stdout } = this.run(['ls-tree', '-r', '--name-only', '-z', ref]);
+    return stdout.split('\0').filter(Boolean);
+  }
+
+  commitInfo(ref) {
+    const result = this.run(['log', '-1', '--pretty=%H%x1f%h%x1f%s%x1f%an%x1f%aI', ref], { allowFailure: true });
+    if (result.status !== 0) return null;
+    const [sha, short, subject, author, date] = result.stdout.trim().split('\x1f');
+    return { sha, short, subject, author, date };
+  }
+
   changedFilesSince(ref) {
     const { stdout } = this.run(['diff', '--name-only', '-z', ref, '--']);
     return stdout.split('\0').filter(Boolean);

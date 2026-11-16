@@ -1,13 +1,15 @@
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   GitBranch,
+  History,
   PanelLeftClose,
   PanelLeftOpen,
   RefreshCw,
   Sparkles,
 } from 'lucide-react';
-import type { ReviewData } from '../types';
+import type { HubProject, ReviewData } from '../types';
 import { prettyRangeLabel } from '../format';
 
 interface HeaderProps {
@@ -18,6 +20,10 @@ interface HeaderProps {
   sidebarOpen: boolean;
   refreshing: boolean;
   openTodos: number;
+  hubProjects: HubProject[];
+  hubAvailable: boolean;
+  currentProjectId?: string;
+  onOpenRepoPanel: () => void;
   onPrev: () => void;
   onNext: () => void;
   onToggleSidebar: () => void;
@@ -43,6 +49,10 @@ export function Header({
   sidebarOpen,
   refreshing,
   openTodos,
+  hubProjects,
+  hubAvailable,
+  currentProjectId,
+  onOpenRepoPanel,
   onPrev,
   onNext,
   onToggleSidebar,
@@ -93,10 +103,17 @@ export function Header({
       <div className="mx-1 h-6 w-px bg-line" />
 
       <div className="flex min-w-0 items-center gap-2.5">
-        <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-mist-300">
+        <button
+          type="button"
+          onClick={onOpenRepoPanel}
+          disabled={!hubAvailable}
+          className="group flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] text-mist-300 transition hover:bg-ink-800/70 hover:text-mist-100 disabled:cursor-default disabled:hover:bg-transparent"
+          title={hubAvailable ? '切换仓库 / 查看提交历史' : meta.repo}
+        >
           <GitBranch size={12.5} className="shrink-0 text-mist-600" />
           <span className="truncate font-medium">{meta.repo || 'repository'}</span>
-        </span>
+          {hubAvailable ? <ChevronDown size={11} className="shrink-0 text-mist-600" /> : null}
+        </button>
         <span className="flex shrink-0 items-center gap-1 rounded-md border border-accent/15 bg-accent-soft px-1.5 py-[3px] font-mono text-[10px] text-accent-bright">
           {meta.branch}
         </span>
@@ -144,6 +161,18 @@ export function Header({
             <ChevronRight size={15} />
           </button>
         </div>
+
+        {hubAvailable ? (
+          <button
+            type="button"
+            onClick={onOpenRepoPanel}
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-ink-900/70 text-mist-500 transition hover:border-line hover:bg-ink-750 hover:text-mist-100"
+            title="仓库与提交历史"
+            aria-label="仓库与提交历史"
+          >
+            <History size={14} />
+          </button>
+        ) : null}
 
         <button
           type="button"

@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, GitCommitHorizontal, Loader2, RefreshCw } from 'lucide-react';
-import type { DrawerTab, EdgeMode, LayoutDirection, ReviewData, ReviewNode, ReviewTodo } from './types';
+import type {
+  CommitInfo,
+  DrawerTab,
+  EdgeMode,
+  HubProject,
+  LayoutDirection,
+  ReviewData,
+  ReviewNode,
+  ReviewTodo,
+} from './types';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { GraphView } from './components/GraphView';
@@ -8,6 +17,7 @@ import { CanvasToolbar } from './components/CanvasToolbar';
 import { Legend } from './components/Legend';
 import { DetailDrawer } from './components/DetailDrawer';
 import { ResizeHandle } from './components/ResizeHandle';
+import { RepoPanel } from './components/RepoPanel';
 import { computeLayout } from './layout';
 import { cn } from './cn';
 
@@ -27,8 +37,8 @@ function readPersisted(key: string): PersistedState {
   }
 }
 
-function stateKeyFor(meta: { repo?: string; branch?: string } | undefined): string {
-  return `diff-viz:${meta?.repo ?? 'repo'}:${meta?.branch ?? 'unknown'}`;
+function stateKeyFor(meta: { repo?: string; branch?: string; reviewId?: string } | undefined): string {
+  return `diff-viz:${meta?.repo ?? 'repo'}:${meta?.branch ?? 'unknown'}:${meta?.reviewId ?? 'live'}`;
 }
 
 const SIDEBAR_MIN = 240;
@@ -103,12 +113,20 @@ export function App() {
   const [extraTodos, setExtraTodos] = useState<Record<string, ReviewTodo[]>>({});
   const [serverOnline, setServerOnline] = useState(true);
   const [panelWidths, setPanelWidths] = useState<PanelWidths>(readPanelWidths);
+  const [projects, setProjects] = useState<HubProject[]>([]);
+  const [hubAvailable, setHubAvailable] = useState(false);
+  const [currentReviewId, setCurrentReviewId] = useState<string | null>(null);
+  const [repoPanelOpen, setRepoPanelOpen] = useState(false);
+  const [switching, setSwitching] = useState(false);
+  const [switchError, setSwitchError] = useState<string | null>(null);
   const sidebarDragStart = useRef(panelWidths.sidebarWidth);
   const drawerDragStart = useRef(panelWidths.drawerWidth);
   const sidebarWidth = panelWidths.sidebarWidth;
   const drawerWidth = panelWidths.drawerWidth;
 
   const storageKey = stateKeyFor(data?.meta);
+  const currentProjectId =
+    data?.meta.projectId ?? projects.find((project) => project.name === data?.meta.repo)?.id;
 
   useEffect(() => {
     try {
@@ -132,41 +150,162 @@ export function App() {
     return () => window.removeEventListener('resize', handleWindowResize);
   }, []);
 
-  const loadData = useCallback(
-    async (initial: boolean) => {
-      if (!initial) setRefreshing(true);
-      try {
-        const response = await fetch(`/api/data?t=${Date.now()}`, { cache: 'no-store' });
-        if (!response.ok) throw new Error(`无法读取数据（HTTP ${response.status}）`);
-        const payload = (await response.json()) as ReviewData;
-        if (!payload?.meta || !Array.isArray(payload.nodes)) throw new Error('数据文件格式不正确');
-        setData(payload);
-        setError(null);
-        setServerOnline(true);
+  const hydrateData = useCallback((payload: ReviewData) => {
+    if (!payload?.meta || !Array.isArray(payload.nodes)) throw new Error('数据文件格式不正确');
+    setData(payload);
+    setError(null);
+    setServerOnline(true);
+    const persisted = readPersisted(stateKeyFor(payload.meta));
+    setTodoOverrides(persisted.todos ?? {});
+    setReviewedOverrides(persisted.reviewed ?? {});
+    setExtraTodos(persisted.extraTodos ?? {});
+    setSelectedId((current) =>
+      current && payload.nodes.some((node) => node.id === current) ? current : null,
+    );
+  }, []);
 
-        const persisted = readPersisted(stateKeyFor(payload.meta));
-        setTodoOverrides(persisted.todos ?? {});
-        setReviewedOverrides(persisted.reviewed ?? {});
-        setExtraTodos(persisted.extraTodos ?? {});
-        setSelectedId((current) =>
-          current && payload.nodes.some((node) => node.id === current) ? current : null,
-        );
-      } catch (loadError) {
-        const message = loadError instanceof Error ? loadError.message : String(loadError);
-        if (initial) setError(message);
-        else setServerOnline(false);
-      } finally {
-        if (initial) setLoading(false);
-        else setRefreshing(false);
+  const fetchReview = useCallback(
+    async (reviewId: string, reset = false) => {
+      const response = await fetch(`/api/data?review=${encodeURIComponent(reviewId)}&t=${Date.now()}`, {
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        let detail = `HTTP ${response.status}`;
+        try {
+          const payload = await response.json();
+          if (payload?.error) detail = payload.error;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(`无法读取 Review：${detail}`);
+      }
+      const payload = (await response.json()) as ReviewData;
+      hydrateData(payload);
+      setCurrentReviewId(reviewId);
+      window.history.replaceState(null, '', `/?review=${encodeURIComponent(reviewId)}`);
+      if (reset) {
+        setSelectedId(null);
+        setTab('summary');
       }
     },
-    [],
+    [hydrateData],
+  );
+
+  const requestReview = useCallback(
+    async ({
+      projectId,
+      scope,
+      commit,
+    }: {
+      projectId: string;
+      scope: 'worktree' | 'commit' | 'last' | 'staged' | 'range' | 'base';
+      commit?: string;
+    }) => {
+      setSwitching(true);
+      setSwitchError(null);
+      try {
+        const response = await fetch('/api/review', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId, scope, commit }),
+        });
+        if (!response.ok) {
+          let detail = `HTTP ${response.status}`;
+          try {
+            const payload = await response.json();
+            if (payload?.error) detail = payload.error;
+          } catch {
+            /* ignore */
+          }
+          throw new Error(detail);
+        }
+        const payload = (await response.json()) as { reviewId: string };
+        await fetchReview(payload.reviewId, true);
+        setRepoPanelOpen(false);
+        setSelectedId(null);
+      } catch (switchFailure) {
+        setSwitchError(switchFailure instanceof Error ? switchFailure.message : String(switchFailure));
+      } finally {
+        setSwitching(false);
+      }
+    },
+    [fetchReview],
   );
 
   useEffect(() => {
-    void loadData(true);
-  }, [loadData]);
+    let cancelled = false;
+    const bootstrap = async () => {
+      try {
+        const hubResponse = await fetch('/api/hub', { cache: 'no-store' });
+        if (hubResponse.ok) {
+          const hub = (await hubResponse.json()) as { projects?: HubProject[] };
+          if (cancelled) return;
+          const hubProjects = hub.projects ?? [];
+          setProjects(hubProjects);
+          setHubAvailable(true);
 
+          const reviewId = new URLSearchParams(window.location.search).get('review');
+          if (reviewId) {
+            await fetchReview(reviewId);
+            return;
+          }
+          if (hubProjects.length > 0) {
+            const response = await fetch('/api/review', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ projectId: hubProjects[0].id, scope: 'worktree' }),
+            });
+            if (!response.ok) throw new Error(`无法打开仓库：HTTP ${response.status}`);
+            const payload = (await response.json()) as { reviewId: string };
+            await fetchReview(payload.reviewId);
+            return;
+          }
+          throw new Error('hub 已启动，但还没有注册仓库；请先在目标仓库运行 diff-viz。');
+        }
+
+        // Legacy single-review server.
+        const response = await fetch(`/api/data?t=${Date.now()}`, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`无法读取数据（HTTP ${response.status}）`);
+        hydrateData((await response.json()) as ReviewData);
+      } catch (bootstrapError) {
+        if (!cancelled) {
+          setError(bootstrapError instanceof Error ? bootstrapError.message : String(bootstrapError));
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void bootstrap();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchReview, hydrateData]);
+
+  const openRepoPanel = useCallback(async () => {
+    setSwitchError(null);
+    setRepoPanelOpen(true);
+    try {
+      const response = await fetch('/api/hub', { cache: 'no-store' });
+      if (response.ok) {
+        const payload = (await response.json()) as { projects?: HubProject[] };
+        setProjects(payload.projects ?? []);
+      }
+    } catch {
+      /* panel still shows the last known list */
+    }
+  }, []);
+
+  const refreshReview = useCallback(async () => {
+    if (!currentReviewId) return;
+    setRefreshing(true);
+    try {
+      await fetchReview(currentReviewId);
+    } catch {
+      setServerOnline(false);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [currentReviewId, fetchReview]);
   useEffect(() => {
     if (!data) return;
     try {
@@ -286,7 +425,7 @@ export function App() {
       const response = await fetch('/api/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, reviewId: currentReviewId }),
       });
       if (!response.ok) throw new Error('request failed');
       const json = (await response.json()) as { ok?: boolean; todo?: ReviewTodo };
@@ -296,7 +435,7 @@ export function App() {
       setServerOnline(false);
       return null;
     }
-  }, []);
+  }, [currentReviewId]);
 
   const toggleTodo = useCallback(
     (todo: ReviewTodo, completed: boolean) => {
@@ -416,7 +555,7 @@ export function App() {
             type="button"
             onClick={() => {
               setLoading(true);
-              void loadData(true);
+              window.location.reload();
             }}
             className="mt-4 flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-[11px] font-medium text-[#fbf9f4] transition hover:bg-accent-bright"
           >
@@ -440,10 +579,14 @@ export function App() {
         sidebarOpen={sidebarOpen}
         refreshing={refreshing}
         openTodos={openTodoTotal}
+        hubProjects={projects}
+        hubAvailable={hubAvailable}
+        currentProjectId={currentProjectId}
+        onOpenRepoPanel={() => void openRepoPanel()}
         onPrev={() => stepReview(-1)}
         onNext={() => stepReview(1)}
         onToggleSidebar={() => setSidebarOpen((value) => !value)}
-        onRefresh={() => void loadData(false)}
+        onRefresh={() => void refreshReview()}
       />
 
       <div className="flex min-h-0 flex-1">
@@ -558,6 +701,24 @@ export function App() {
           </div>
         ) : null}
       </div>
+
+      <RepoPanel
+        open={repoPanelOpen}
+        projects={projects}
+        currentProjectId={currentProjectId}
+        busy={switching}
+        error={switchError}
+        onClose={() => {
+          setRepoPanelOpen(false);
+          setSwitchError(null);
+        }}
+        onOpenWorktree={(projectId) => {
+          void requestReview({ projectId, scope: 'worktree' });
+        }}
+        onOpenCommit={(projectId, commit) => {
+          void requestReview({ projectId, scope: 'commit', commit: commit.sha });
+        }}
+      />
 
       {!serverOnline ? (
         <div

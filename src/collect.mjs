@@ -59,6 +59,16 @@ export function resolveScope(repo, options = {}) {
     includeUntracked: false,
   });
 
+  const worktreeScope = () => ({
+    mode: 'worktree',
+    baseRef: head || emptyTree,
+    newRef: 'WORKTREE',
+    headRef,
+    args: diffArgs([head || emptyTree, '--']),
+    label: head ? `工作区 · ${head.slice(0, 8)}` : '工作区 · 初始提交',
+    includeUntracked: options.untracked !== false,
+  });
+
   if (options.staged) {
     if (!head) {
       return {
@@ -80,6 +90,13 @@ export function resolveScope(repo, options = {}) {
       label: `暂存区 · ${head.slice(0, 8)}`,
       includeUntracked: false,
     };
+  }
+
+  if (options.commit) {
+    const target = repo.revParse(options.commit);
+    if (!target) throw new Error(`无法解析提交：${options.commit}`);
+    const parent = repo.revParse(`${options.commit}~1`) || emptyTree;
+    return runRevDiff(parent, target, `提交 ${target.slice(0, 8)}`);
   }
 
   if (options.last) {
@@ -124,6 +141,8 @@ export function resolveScope(repo, options = {}) {
     return runRevDiff(baseRef, head, `${options.base}...HEAD`);
   }
 
+  if (options.worktree) return worktreeScope();
+
   const useLast = options.last === undefined && options.autoLast !== false && head && !repo.isDirty();
   if (useLast && repo.revParse('HEAD~1')) {
     return runRevDiff(repo.revParse('HEAD~1'), head, `最近提交 · ${head.slice(0, 8)}`);
@@ -132,15 +151,7 @@ export function resolveScope(repo, options = {}) {
     return runRevDiff(emptyTree, head, `首个提交 · ${head.slice(0, 8)}`);
   }
 
-  return {
-    mode: 'worktree',
-    baseRef: head || emptyTree,
-    newRef: 'WORKTREE',
-    headRef,
-    args: diffArgs([head || emptyTree, '--']),
-    label: head ? `工作区 · ${head.slice(0, 8)}` : '工作区 · 初始提交',
-    includeUntracked: options.untracked !== false,
-  };
+  return worktreeScope();
 }
 
 function getWorktreeContent(repo, filePath) {
@@ -399,9 +410,11 @@ export function buildReviewData(repo, options = {}) {
     changedFiles.push(node);
   }
 
+  const scanRef = options.scanRef ?? (scope.mode === 'rev' ? scope.newRef : null);
   const scan = scanRepository(repo, {
-    includeUntracked: options.untracked !== false,
+    includeUntracked: !scanRef && options.untracked !== false,
     maxFiles: options.maxScanFiles ?? 15000,
+    gitRef: scanRef,
   });
   warnings.push(...scan.warnings);
 
@@ -561,6 +574,7 @@ export function buildReviewData(repo, options = {}) {
     headRef: scope.headRef || null,
     impactDepth,
     repo: path.basename(repo.root),
+    scannedRef: scanRef,
     generator: 'diff-viz',
     version: options.version || '0.1.0',
     reviewOrder,
@@ -579,15 +593,14 @@ export function buildReviewData(repo, options = {}) {
 
   const data = { meta, nodes: finalNodes, edges: dedupedEdges };
 
-  if (options.annotationFile) {
-    const annotations = readJsonSafe(options.annotationFile);
-    if (!annotations) {
-      warnings.push(`无法读取注解文件：${options.annotationFile}`);
-      meta.warnings = [...new Set(warnings)];
-    } else {
-      applyAnnotations(data, annotations);
-      meta.warnings = [...new Set(warnings)];
-    }
+  const annotations =
+    options.annotations ?? (options.annotationFile ? readJsonSafe(options.annotationFile) : null);
+  if (options.annotationFile && !annotations) {
+    warnings.push(`无法读取注解文件：${options.annotationFile}`);
+    meta.warnings = [...new Set(warnings)];
+  } else if (annotations) {
+    applyAnnotations(data, annotations);
+    meta.warnings = [...new Set(warnings)];
   }
 
   return data;

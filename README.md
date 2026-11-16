@@ -3,7 +3,7 @@
 [![CI](https://github.com/mdhUser/diff-viz/actions/workflows/ci.yml/badge.svg)](https://github.com/mdhUser/diff-viz/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-本地运行的代码变更可视化 Review 工具：读取 Git diff，静态解析文件依赖，生成一张可交互的变更拓扑图，并启动本地 Web 界面查看改动摘要、代码 Diff 与待确认事项。
+本地运行的代码变更可视化 Review 工具：读取 Git diff，静态解析文件依赖，生成可交互的变更拓扑图，并启动一个常驻本地 hub 查看改动摘要、代码 Diff 与待确认事项。hub 可复用、可切换仓库、可浏览历史提交。
 
 ![diff-viz 拓扑总览](docs/overview.png)
 
@@ -25,7 +25,9 @@
 - **Review 流程**：按依赖顺序给出 reviewOrder，`←` / `→` 逐个文件切换，标记已 Review。
 - **三段式详情**：改动摘要与影响评估、Side-by-Side / Unified 代码 Diff（语法高亮）、待确认 TODO 列表。
 - **Agent 注解**：Agent 可把自己的总结、影响分析、风险点写入 JSON；界面直接展示并支持勾选确认。
-- **状态持久化**：勾选状态写回 `.diff-review-data.json`，同时备份到 `localStorage`。
+- **单 hub 复用**：多个仓库、多次分析共用一个常驻进程，不再为每次 Review 启动新端口。
+- **仓库与历史**：界面内切换已注册仓库，浏览最近 40 个提交并查看历史 commit 的 Diff + 依赖拓扑。
+- **状态持久化**：勾选状态写回 hub 的 Review 缓存，同时备份到 `localStorage`。
 - **零运行时依赖**：CLI 只用 Node.js 内置模块；`dist/` 已包含构建好的前端资源。
 
 ## 快速开始
@@ -48,7 +50,14 @@ diff-viz
 1. 当前工作区有改动 → Review 工作区（包含暂存与未暂存、未跟踪的新文件）。
 2. 工作区干净 → Review 最近一次提交。
 3. 生成 `.diff-review-data.json`。
-4. 启动 `http://127.0.0.1:5173` 并自动打开浏览器。
+4. 确保一个常驻 hub 在 `http://127.0.0.1:5173`（端口被占用会自动递增），把本次结果注册进去并打开浏览器。
+5. CLI 随后退出；hub 留在后台，后续分析复用它。
+
+hub 默认把项目列表和 Review 缓存放在 `~/.diff-viz/`；如果该目录不可写（例如 Agent 沙箱），会自动落到系统临时目录。也可以显式指定：
+
+```bash
+DIFF_VIZ_HOME=/path/to/state node bin/diff-viz.mjs
+```
 
 修改前端源码后需要重新构建：
 
@@ -60,6 +69,10 @@ npm run build
 ## 常用命令
 
 ```bash
+# hub 管理
+node bin/diff-viz.mjs hub      # 前台启动/查看 hub
+node bin/diff-viz.mjs stop     # 停止后台 hub
+
 # 只看已暂存
 node bin/diff-viz.mjs --staged
 
@@ -75,8 +88,12 @@ node bin/diff-viz.mjs --base main
 # 只生成 JSON，不开界面
 node bin/diff-viz.mjs --json-only --quiet
 
-# 重新打开已有的数据文件
+# 重新打开已有的数据文件（注册到 hub，不新起进程）
 node bin/diff-viz.mjs serve --data .diff-review-data.json
+
+# 前台启动/查看 hub，停止 hub
+node bin/diff-viz.mjs hub
+node bin/diff-viz.mjs stop
 
 # 把 Agent / 人工总结合并进已有数据
 node bin/diff-viz.mjs annotate \
@@ -98,11 +115,13 @@ node bin/diff-viz.mjs annotate \
 | `--impact-depth <n>` | 下游影响深度，默认 2 |
 | `--max-impact <n>` | 最多展示受影响文件数，默认 120 |
 | `--no-untracked` | 不纳入未跟踪的新文件 |
-| `--json-only` | 只写 JSON，不启动服务 |
-| `--port <n>` | 端口，默认 5173（被占用自动递增） |
+| `--json-only` | 只写 JSON，不注册 hub、不启动服务 |
+| `--port <n>` | hub 端口，默认 5173（被占用自动递增） |
 | `--host <addr>` | 监听地址，默认 127.0.0.1 |
 | `--no-open` | 不自动打开浏览器 |
 | `--repo <dir>` | 指定仓库目录 |
+| `hub` | 前台启动/查看常驻 hub |
+| `stop` | 停止后台 hub |
 | `--quiet` | 减少日志输出 |
 
 ## 界面
@@ -118,6 +137,16 @@ node bin/diff-viz.mjs annotate \
 - 左右两块面板都可以拖拽边缘调整宽度：拖动分隔条即可，双击或按 `Home` 恢复默认宽度；宽度按浏览器保存在 `localStorage` 中。键盘用户可以先 `Tab` 聚焦分隔条，再用 `←` / `→` 调整。
 - 支持横向 / 纵向布局、缩放、拖拽画布、MiniMap。
 - 节点颜色与左上角图例一致；虚线边框表示该文件本身没有改动。
+
+### 仓库与提交历史
+
+点击顶部仓库名（或历史图标）打开面板：
+
+- 左侧列出 hub 中注册过的仓库，点击切换；
+- 右侧「当前工作区」重新分析未提交改动；
+- 「最近提交」列出最近 40 个 commit，点击任意一条即可查看该提交的 Diff 和依赖拓扑。
+
+切换后 URL 会变成 `?review=...`，刷新页面仍停留在同一个 Review。
 
 ### 详情抽屉
 
@@ -238,10 +267,10 @@ node bin/diff-viz.mjs annotate \
 
 ## 状态持久化
 
-- 勾选 TODO / 标记 Review → `POST /api/state` → 写回数据文件。
-- 同时写入 `localStorage`，服务不可用时仍可勾选。
-- 重新生成数据时，会按 todo id / 文本保留完成状态和已 Review 标记，并保留手工添加的备注。
-- 服务只监听 `127.0.0.1`，不对局域网开放。
+- 勾选 TODO / 标记 Review → `POST /api/state` → 写回 hub 中对应的 Review 缓存。
+- 同时写入 `localStorage`，hub 不可用时仍可勾选。
+- 重新生成同一 Review 时，会按 todo id / 文本保留完成状态和已 Review 标记，并保留手工添加的备注。
+- hub 只监听 `127.0.0.1`，不对局域网开放。
 
 ## 目录结构
 
@@ -254,7 +283,8 @@ diff-viz/
 │   ├── diff-parse.mjs      # unified diff 解析 / TODO 扫描
 │   ├── deps.mjs            # JS/TS、Python、Go、Java import 解析
 │   ├── git.mjs             # Git 命令封装
-│   ├── server.mjs          # 本地 HTTP 服务与状态写回
+│   ├── hub.mjs             # 常驻 hub：仓库注册、历史 Review、状态 API
+│   ├── server.mjs          # 单 Review HTTP 服务（兼容/测试）
 │   └── util.mjs
 ├── web/                    # React + Vite + Tailwind 前端源码
 ├── dist/                   # 已构建前端资源

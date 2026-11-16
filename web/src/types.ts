@@ -59,6 +59,10 @@ export interface ReviewMeta {
   headRef?: string;
   impactDepth?: number;
   repo?: string;
+  projectId?: string;
+  reviewId?: string;
+  scopeLabel?: string;
+  scannedRef?: string;
   generator?: string;
   version?: string;
   reviewOrder?: string[];
@@ -86,3 +90,19 @@ export interface ReviewData {
 export type LayoutDirection = 'LR' | 'TB';
 export type EdgeMode = 'impact' | 'dependency';
 export type DrawerTab = 'summary' | 'diff' | 'todos';
+
+export interface HubProject {
+  id: string;
+  name: string;
+  root: string;
+  branch?: string;
+  lastReviewId?: string | null;
+}
+
+export interface CommitInfo {
+  sha: string;
+  short: string;
+  subject: string;
+  author: string;
+  date: string;
+}

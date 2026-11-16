@@ -28,5 +28,22 @@
   "engines": {
     "node": ">=20"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/dagre": "^0.7.54",
+    "@types/node": "^22.20.5",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^5.2.0",
+    "@xyflow/react": "^12.12.1",
+    "dagre": "^0.8.5",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-diff-viewer-continued": "^4.4.0",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.8"
+  }
 }

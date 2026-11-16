@@ -1,5 +1,8 @@
 # diff-viz
 
+[![CI](https://github.com/mdhUser/diff-viz/actions/workflows/ci.yml/badge.svg)](https://github.com/mdhUser/diff-viz/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 本地运行的代码变更可视化 Review 工具：读取 Git diff，静态解析文件依赖，生成一张可交互的变更拓扑图，并启动本地 Web 界面查看改动摘要、代码 Diff 与待确认事项。
 
 ![diff-viz 拓扑总览](docs/overview.png)

@@ -319,20 +319,42 @@ export async function startHub({
       if (pathname === '/api/commits') {
         const project = getProject(url.searchParams.get('project'));
         const repo = new GitRepo(project.root);
-        const { stdout } = repo.run([
+        const all = url.searchParams.get('all') !== '0';
+        const args = [
           'log',
+          '--date-order',
           '-n',
-          '40',
-          '--pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%aI',
-        ]);
+          '80',
+          '--pretty=format:%H%x1f%h%x1f%P%x1f%s%x1f%an%x1f%aI%x1f%D',
+        ];
+        if (all) args.splice(1, 0, '--all');
+        const { stdout } = repo.run(args);
         const commits = stdout
           .split('\n')
           .filter(Boolean)
           .map((line) => {
-            const [sha, short, subject, author, date] = line.split('\x1f');
-            return { sha, short, subject, author, date };
+            const [sha, short, parentsRaw, subject, author, date, decorations] = line.split('\x1f');
+            const refs = (decorations || '')
+              .split(',')
+              .map((ref) => ref.trim())
+              .filter(Boolean)
+              .map((ref) => {
+                if (ref === 'HEAD') return 'HEAD';
+                if (ref.startsWith('HEAD -> ')) return `HEAD → ${ref.slice(8)}`;
+                if (ref.startsWith('tag: ')) return `tag: ${ref.slice(5)}`;
+                return ref;
+              });
+            return {
+              sha,
+              short,
+              subject,
+              author,
+              date,
+              parents: (parentsRaw || '').split(' ').filter(Boolean),
+              refs,
+            };
           });
-        sendJson(res, 200, { ok: true, commits });
+        sendJson(res, 200, { ok: true, commits, all });
         return;
       }
 

@@ -105,4 +105,6 @@ export interface CommitInfo {
   subject: string;
   author: string;
   date: string;
+  parents: string[];
+  refs: string[];
 }

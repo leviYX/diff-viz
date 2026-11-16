@@ -1,6 +1,6 @@
 {
   "name": "diff-viz",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "description": "Local git change review visualizer: dependency topology, code diffs, impact analysis and review todos.",

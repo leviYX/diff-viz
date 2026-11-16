@@ -706,6 +706,7 @@ export function App() {
         open={repoPanelOpen}
         projects={projects}
         currentProjectId={currentProjectId}
+        currentSha={data?.meta.headRef}
         busy={switching}
         error={switchError}
         onClose={() => {

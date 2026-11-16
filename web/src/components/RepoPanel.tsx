@@ -3,20 +3,20 @@ import {
   Check,
   FolderGit2,
   GitBranch,
-  GitCommitHorizontal,
   History,
   Loader2,
   RefreshCw,
   X,
 } from 'lucide-react';
 import type { CommitInfo, HubProject } from '../types';
-import { formatTimestamp } from '../format';
+import { CommitGraph } from './CommitGraph';
 import { cn } from '../cn';
 
 interface RepoPanelProps {
   open: boolean;
   projects: HubProject[];
   currentProjectId?: string;
+  currentSha?: string;
   busy: boolean;
   error?: string | null;
   onClose: () => void;
@@ -28,6 +28,7 @@ export function RepoPanel({
   open,
   projects,
   currentProjectId,
+  currentSha,
   busy,
   error,
   onClose,
@@ -162,7 +163,7 @@ export function RepoPanel({
             </button>
 
             <div className="mb-2 flex items-center justify-between px-1">
-              <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-mist-500">最近提交</span>
+              <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-mist-500">版本链条</span>
               {loadingCommits ? <Loader2 size={11} className="animate-spin text-accent" /> : null}
             </div>
 
@@ -172,35 +173,14 @@ export function RepoPanel({
               </div>
             ) : null}
 
-            {!loadingCommits && projectCommits.length === 0 && !commitsError ? (
-              <div className="px-2 py-6 text-[10.5px] text-mist-500">这个仓库还没有提交。</div>
-            ) : (
-              <div className="space-y-1">
-                {projectCommits.map((commit) => (
-                  <button
-                    key={commit.sha}
-                    type="button"
-                    disabled={busy}
-                    onClick={() => selectedProject && onOpenCommit(selectedProject.id, commit)}
-                    className="group flex w-full items-start gap-2.5 rounded-lg border border-transparent px-2.5 py-2 text-left transition hover:border-line hover:bg-ink-850/70 disabled:opacity-50"
-                  >
-                    <GitCommitHorizontal size={13} className="mt-0.5 shrink-0 text-mist-600" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[11px] text-mist-200 group-hover:text-mist-100">
-                        {commit.subject || '(no message)'}
-                      </span>
-                      <span className="mt-0.5 flex items-center gap-1.5 font-mono text-[8.5px] text-mist-600">
-                        <span>{commit.short}</span>
-                        <span>·</span>
-                        <span className="truncate">{commit.author}</span>
-                        <span>·</span>
-                        <span className="shrink-0">{formatTimestamp(commit.date)}</span>
-                      </span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
+            <CommitGraph
+              commits={projectCommits}
+              currentSha={currentSha}
+              disabled={busy}
+              onSelect={(commit) => {
+                if (selectedProject) onOpenCommit(selectedProject.id, commit);
+              }}
+            />
           </div>
         </div>
 

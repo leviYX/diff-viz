@@ -1,9 +1,9 @@
 # diff-viz
 
 [![CI](https://github.com/mdhUser/diff-viz/actions/workflows/ci.yml/badge.svg)](https://github.com/mdhUser/diff-viz/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/mdhUser/diff-viz/blob/main/LICENSE)
 [![npm](https://img.shields.io/npm/v/diff-viz-cli.svg)](https://www.npmjs.com/package/diff-viz-cli)
-[更新日志](CHANGELOG.md)
+[更新日志](https://github.com/mdhUser/diff-viz/blob/main/CHANGELOG.md)
 
 本地运行的代码变更可视化 Review 工具：读取 Git diff，静态解析文件依赖，生成可交互的变更拓扑图，并启动一个常驻本地 hub 查看改动摘要、代码 Diff 与待确认事项。hub 可复用、可切换仓库、可浏览历史提交。
 
@@ -38,20 +38,20 @@
 
 ## 快速开始
 
-要求：Node.js >= 20，Git 仓库。在**任意 Git 仓库根目录**执行。
+要求：Node.js >= 20，Git 仓库。在**任意 Git 仓库根目录**执行：
 
 ```bash
-git clone https://github.com/mdhUser/diff-viz.git
-cd diff-viz
+# 方式一：不安装，直接运行（npx 会先下载并缓存）
+npx diff-viz-cli
 
-# 在目标仓库里运行（dist 已随仓库提供，不需要 npm install）
-node /path/to/diff-viz/bin/diff-viz.mjs
-
-# 或链接成全局命令，之后在任意仓库直接用 diff-viz
-npm link
+# 方式二：全局安装一次，之后在任意仓库直接用 diff-viz
+npm install -g diff-viz-cli
+diff-viz
 ```
 
-> npm 包 `diff-viz-cli` 已就绪但尚未发布；发布后可直接 `npx diff-viz-cli`。
+包名是 `diff-viz-cli`，安装后的命令是 `diff-viz`。也可以用 `pnpm dlx diff-viz-cli` / `bunx diff-viz-cli` 临时运行。
+
+> 第一次运行 `npx` 会提示确认安装，输入 `y` 即可；之后会走本地缓存，启动基本无感知。
 
 默认行为：
 
@@ -65,13 +65,6 @@ hub 默认把项目列表和 Review 缓存放在 `~/.diff-viz/`；如果该目�
 
 ```bash
 DIFF_VIZ_HOME=/path/to/state diff-viz
-```
-
-修改前端源码后需要重新构建：
-
-```bash
-npm install
-npm run build
 ```
 
 ## 常用命令
@@ -214,7 +207,7 @@ diff-viz annotate \
 - 已存在的 TODO 会按文本去重。
 - 不想重启服务时，修改注解文件后执行 `annotate`，浏览器点「刷新」即可。
 
-完整的 Agent 使用说明见 [SKILL.md](SKILL.md)。
+完整的 Agent 使用说明见 [SKILL.md](https://github.com/mdhUser/diff-viz/blob/main/SKILL.md)。
 
 在其他 Agent（Claude Code / Cursor / OpenAI Codex 等）中安装和使用，见 [docs/agent-integrations.md](https://github.com/mdhUser/diff-viz/blob/main/docs/agent-integrations.md)。
 
@@ -314,9 +307,17 @@ diff-viz/
 
 ## 开发与测试
 
+从源码运行（改前端才需要）：
+
 ```bash
+git clone https://github.com/mdhUser/diff-viz.git
+cd diff-viz
 npm install
 npm run build
+node bin/diff-viz.mjs        # 或 npm link 后使用 diff-viz
+```
+
+```bash
 npm test
 npm run typecheck
 npm run release:check   # 校验当前版本在 CHANGELOG.md 中有发布说明
@@ -328,14 +329,14 @@ npm run package:skill   # 生成 release/diff-viz-skill.zip
 
 ## 发布新版本
 
-发布流程（详细说明见 [CHANGELOG.md](CHANGELOG.md)）：
+发布流程（详细说明见 [CHANGELOG.md](https://github.com/mdhUser/diff-viz/blob/main/CHANGELOG.md)）：
 
 1. 在 `CHANGELOG.md` 的 `## [Unreleased]` 下写清楚本版本的 **Added / Changed / Fixed**；只写 feature 名称不够，要说明用户能感知到什么。
 2. 把 `Unreleased` 改成新版本号，并补上日期。
 3. 更新 `package.json` 版本：
 
    ```bash
-   npm version 0.5.0 --no-git-tag-version
+   npm version 0.7.0 --no-git-tag-version
    npm run release:check
    ```
 
@@ -344,14 +345,15 @@ npm run package:skill   # 生成 release/diff-viz-skill.zip
    ```bash
    npm run build
    npm run package:skill
+   npm pack --dry-run          # 确认 tarball 只包含 bin/src/dist 与文档
    ```
 
 5. 提交、打 tag、推送：
 
    ```bash
    git add -A
-   git commit -m "Release v0.5.0"
-   git tag -a v0.5.0 -m "v0.5.0"
+   git commit -m "Release v0.7.0"
+   git tag -a v0.7.0 -m "v0.7.0"
    git push origin main --tags
    ```
 
@@ -359,9 +361,11 @@ npm run package:skill   # 生成 release/diff-viz-skill.zip
 
    ```bash
    npm login      # 首次或换机器
-   npm publish    # publishConfig 已声明 public，不需要 --access
-   npx diff-viz-cli --version
+   npm publish    # 会先跑 prepublishOnly（release check / typecheck / test / build）
+   npx diff-viz-cli@latest --version
    ```
+
+   `publishConfig` 已声明 public，不需要 `--access`；首次发布会直接占用 `diff-viz-cli` 这个包名。
 
 7. 在 GitHub `Releases` 创建对应 tag 的 release，**把 CHANGELOG 里该版本的内容复制到 release notes**，并上传 `release/diff-viz-skill.zip` 作为 asset。
 8. 确认 CI 通过、npm 上能拉到新版本、Release 页面能下载 asset。
@@ -388,7 +392,7 @@ npm run package:skill   # 生成 release/diff-viz-skill.zip
 | `v0.2.0` | Java 服务依赖解析、同包引用、Java 高亮 |
 | `v0.1.0` | 初始版本：CLI、依赖拓扑、Diff、TODO、Agent Skill |
 
-完整记录见 [CHANGELOG.md](CHANGELOG.md)。
+完整记录见 [CHANGELOG.md](https://github.com/mdhUser/diff-viz/blob/main/CHANGELOG.md)。
 
 ## 打赏作者
 

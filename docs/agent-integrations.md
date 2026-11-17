@@ -8,8 +8,8 @@ diff-viz 本身不是 DSH 专属插件：它是一个 **零运行时依赖的 No
 # 1. 在目标仓库中
 cd /path/to/repo
 
-# 2. 生成数据并启动本地服务
-node /path/to/diff-viz/bin/diff-viz.mjs --no-open
+# 2. 生成数据并启动本地服务（-y 自动确认下载，适合 Agent）
+npx -y diff-viz-cli --no-open
 
 # 3. 浏览器打开输出中的 URL，例如
 #    http://127.0.0.1:5173/
@@ -20,34 +20,37 @@ node /path/to/diff-viz/bin/diff-viz.mjs --no-open
 - 其他范围参数：
 
 ```bash
-node /path/to/diff-viz/bin/diff-viz.mjs --no-open --staged
-node /path/to/diff-viz/bin/diff-viz.mjs --no-open --last
-node /path/to/diff-viz/bin/diff-viz.mjs --no-open --range main..HEAD
-node /path/to/diff-viz/bin/diff-viz.mjs --no-open --base main
+npx -y diff-viz-cli --no-open --staged
+npx -y diff-viz-cli --no-open --last
+npx -y diff-viz-cli --no-open --range main..HEAD
+npx -y diff-viz-cli --no-open --base main
 ```
 
-如果不想每次写完整路径，可以全局链接：
+如果不想每次走 `npx`，可以全局安装一次：
 
 ```bash
-cd /path/to/diff-viz
-npm link
+npm install -g diff-viz-cli
 # 之后任何目录：
 diff-viz --no-open
 ```
 
 ## Claude Code
 
-Claude Code 支持 `SKILL.md` 形式的 Agent Skills。把整个工具目录链接到技能目录即可（`SKILL.md` 的相对路径和 `bin/` 都保留）：
+Claude Code 支持 `SKILL.md` 形式的 Agent Skills。把 npm 包里的工具目录链接到技能目录即可（`SKILL.md` 的相对路径和 `bin/` 都保留）：
 
 ```bash
+npm install -g diff-viz-cli
+
 # 用户级（所有项目可用）
 mkdir -p ~/.claude/skills
-ln -s /path/to/diff-viz ~/.claude/skills/diff-viz
+ln -s "$(npm root -g)/diff-viz-cli" ~/.claude/skills/diff-viz
 
 # 或项目级
 mkdir -p .claude/skills
-ln -s /path/to/diff-viz .claude/skills/diff-viz
+ln -s "$(npm root -g)/diff-viz-cli" .claude/skills/diff-viz
 ```
+
+如果是从源码使用，把上面的 `$(npm root -g)/diff-viz-cli` 换成 clone 下来的目录路径即可。
 
 之后在 Claude Code 中直接说：
 
@@ -62,7 +65,7 @@ Claude Code 没有内置的交互式浏览器面板，CLI 会注册到常驻 hub
 ```markdown
 ## Code review visualization
 After finishing code changes, run:
-`node /path/to/diff-viz/bin/diff-viz.mjs --no-open`
+`npx -y diff-viz-cli --no-open`
 Read `.diff-review-data.json` for machine-readable summaries, then give the user the printed URL.
 Do not commit `.diff-review-data.json` (it contains full source contents).
 ```
@@ -80,7 +83,7 @@ alwaysApply: false
 
 When the user asks for a visual review, or after a multi-file change:
 
-1. Run `node /path/to/diff-viz/bin/diff-viz.mjs --no-open --annotations .diff-review-annotations.json`.
+1. Run `npx -y diff-viz-cli --no-open --annotations .diff-review-annotations.json`.
 2. Write `.diff-review-annotations.json` first when you can summarize the change:
    `{ "meta": { "overallSummary": "..." }, "nodes": { "src/a.ts": { "summary": "...", "impactAnalysis": "...", "todos": ["..."] } } }`.
 3. Give the user the printed `http://127.0.0.1:<port>/` URL.
@@ -98,7 +101,7 @@ Cursor 有内置 Browser/Preview 时可以直接打开 localhost；否则用系�
 ```markdown
 ## Visual change review
 After completing a code change, run:
-`node /path/to/diff-viz/bin/diff-viz.mjs --no-open --annotations .diff-review-annotations.json`
+`npx -y diff-viz-cli --no-open --annotations .diff-review-annotations.json`
 
 - Write `.diff-review-annotations.json` with `meta.overallSummary` and per-file
   `summary` / `impactAnalysis` / `todos` before running it.
@@ -115,7 +118,7 @@ Codex CLI 没有内置网页预览，用户在系统浏览器打开 URL。
 
 ```text
 When a code change needs review, run:
-  node /path/to/diff-viz/bin/diff-viz.mjs --no-open --annotations .diff-review-annotations.json
+  npx -y diff-viz-cli --no-open --annotations .diff-review-annotations.json
 The process stays alive; capture the printed URL and report it.
 Before that, write .diff-review-annotations.json:
   { "meta": { "overallSummary": "..." },
@@ -134,7 +137,7 @@ Only annotate added/modified/deleted files. Use --json-only --quiet for a pure J
 - 需要让 Agent 修改已有结果时，执行：
 
 ```bash
-node /path/to/diff-viz/bin/diff-viz.mjs annotate \
+npx -y diff-viz-cli annotate \
   --data .diff-review-data.json \
   --annotations .diff-review-annotations.json
 ```
@@ -142,6 +145,6 @@ node /path/to/diff-viz/bin/diff-viz.mjs annotate \
 ## 限制
 
 - 目标目录必须是 Git 仓库。
-- 需要 Node.js >= 20；工具目录内已包含 `dist/`，不需要安装前端依赖。
+- 需要 Node.js >= 20；npm 包内已包含构建好的 `dist/`，不需要安装前端依赖。
 - 其他 Agent 不提供 DSH 右侧栏 Browser 这种内置容器时，就只能在系统浏览器查看；若编辑器支持 localhost 预览，也可以贴到其预览面板。
 - 目前没有提供 MCP Server 封装；如果你的 Agent 只接受 MCP 工具调用，需要额外加一层很薄的 MCP wrapper（CLI 输出已经是结构化 JSON，接入成本很低）。

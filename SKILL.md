@@ -14,6 +14,8 @@ description: Use after completing code changes when the user wants to review a g
 > ```
 >
 > 不要把 `$SKILL_DIR` 原样交给 shell。
+>
+> 如果已经通过 npm 安装，也可以把下文所有 `node "$SKILL_DIR/bin/diff-viz.mjs"` 换成 `diff-viz`（全局安装）或 `npx -y diff-viz-cli`（临时运行）。
 
 ## 何时使用
 

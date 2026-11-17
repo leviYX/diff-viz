@@ -2,7 +2,7 @@
 
 用于社交媒体推广 diff-viz 的现成图片与文案。
 
-> 安装状态：npm 包 `diff-viz-cli` 已就绪但**尚未发布**。文案里的安装方式写 clone 仓库，不要写 `npx`，等发布后再统一替换。
+> 安装状态：npm 包 `diff-viz-cli` **已发布**。文案优先写 `npx diff-viz-cli`（或 `npm install -g diff-viz-cli`），clone 仓库只作为源码开发方式。
 
 ## 图片
 

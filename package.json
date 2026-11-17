@@ -22,7 +22,8 @@
     "typecheck": "tsc --noEmit",
     "demo": "node scripts/demo.mjs",
     "package:skill": "node scripts/build-skill-package.mjs",
-    "release:check": "node scripts/check-changelog.mjs"
+    "release:check": "node scripts/check-changelog.mjs",
+    "prepublishOnly": "npm run release:check && npm run typecheck && npm test && npm run build"
   },
   "keywords": [
     "git",

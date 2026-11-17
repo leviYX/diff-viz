@@ -24,7 +24,8 @@
 - **变更提取**：工作区（暂存 + 未暂存）、暂存区、最近一次提交、commit range、与目标分支对比。
 - **依赖拓扑**：静态解析 JS/TS（含 `tsconfig` 的 `baseUrl` / `paths` 别名）、Python、Go、Java 的 import，构建 Nodes / Edges。
 - **状态区分**：新增（绿）、修改（黄）、删除（红）、受影响但未改动（灰色虚线）。
-- **Review 流程**：按依赖顺序给出 reviewOrder，`←` / `→` 逐个文件切换，标记已 Review。
+- **Review 流程**：按依赖顺序给出 reviewOrder，`←` / `→` 逐个文件切换，标记已 Review；与本次改动无关的文件可以「忽略」，在图上弱化显示。
+- **影响链路**：每个受影响文件记录 `impactChain`，详情里能看到「A → B → C → D」是怎么传播过来的。
 - **版本链条**：提交 DAG、分支/tag/merge 车道，点击历史 commit 查看当时的 Diff 与拓扑。
 - **界面体验**：柔和亮色主题、可拖拽左右面板、缩放/小地图、键盘导航。
 - **三段式详情**：改动摘要与影响评估、Side-by-Side / Unified 代码 Diff（语法高亮）、待确认 TODO 列表。
@@ -32,7 +33,7 @@
 - **单 hub 复用**：多个仓库、多次分析共用一个常驻进程，不再为每次 Review 启动新端口。
 - **实时**：hub 监听文件变化并自动重算，页面通过 SSE 自动刷新，不用手动重跑。
 - **仓库与历史**：界面内按路径添加/移除仓库、切换已注册仓库，通过版本链条浏览最多 80 个提交（含分支、tag、merge），查看历史 commit 的 Diff + 依赖拓扑。
-- **状态持久化**：勾选状态写回 hub 的 Review 缓存，同时备份到 `localStorage`。
+- **状态持久化**：勾选、已 Review、忽略状态写回 hub 的 Review 缓存，同时备份到 `localStorage`。
 - **零运行时依赖**：CLI 只用 Node.js 内置模块；`dist/` 已包含构建好的前端资源。
 
 ## 快速开始
@@ -148,12 +149,14 @@ diff-viz annotate \
 - 左右两块面板都可以拖拽边缘调整宽度：拖动分隔条即可，双击或按 `Home` 恢复默认宽度；宽度按浏览器保存在 `localStorage` 中。键盘用户可以先 `Tab` 聚焦分隔条，再用 `←` / `→` 调整。
 - 支持横向 / 纵向布局、缩放、拖拽画布、MiniMap。
 - 节点颜色与左上角图例一致；虚线边框表示该文件本身没有改动。
+- 抽屉右上角的「忽略」会把与本次改动无关的文件标灰（透明度 42%），状态会写回 Review；适合压掉 Java 同包匹配这类误报。
+- hub 监听工作区文件变化，改完代码保存后图会自动重算，页面通过 SSE 收到通知并刷新，不需要重新运行 CLI。
 
 ### 仓库与提交历史
 
 点击顶部仓库名（或历史图标）打开面板：
 
-- 左侧列出 hub 中注册过的仓库，点击切换；
+- 左侧列出 hub 中注册过的仓库，点击切换；底部输入框可按绝对路径添加仓库（自动解析到 Git 仓库根目录并校验），条目 hover 出现 × 可移除；
 - 右侧「当前工作区」重新分析未提交改动；
 - 「版本链条」按提交父子关系绘制，显示 `HEAD`、分支、tag 和 merge 车道；最多加载 80 个 commit。
 - 点击任意提交节点，查看该提交的 Diff 和依赖拓扑。
@@ -264,6 +267,8 @@ diff-viz annotate \
 - `edges.source` **import 了** `edges.target`（依赖边）。UI 的「影响流向」会在渲染时反向画箭头。
 - `impacted_only` 表示该文件没有改动，但（间接）依赖了变更文件。
 - `oldContent` / `newContent` 是完整文件内容，仅用于浏览器内 Diff；超过 400,000 字符会截断。
+- `impactChain` 是受影响文件的传播路径（如 `["src/a.ts","src/b.ts","src/c.ts"]`），第一个元素是触发它的变更文件。
+- `ignored` 表示该节点被人工标记为无关改动；`reviewed` 表示已 Review，二者都会在重新生成时保留。
 - `imports` / `importedBy` 是该文件**完整**的直接依赖列表，包含没有画进图里的上游文件；详情抽屉会把这些文件标成「图外」。
 - `meta.reviewOrder` 是依赖优先的 Review 顺序；`meta.warnings` 记录扫描上限等提示。
 - 额外字段（`summarySource`、`reviewed`、`impactOrigins`、`depth`、`binary` 等）用于界面增强，不属于必需字段。
@@ -283,7 +288,7 @@ diff-viz annotate \
 
 - 勾选 TODO / 标记 Review → `POST /api/state` → 写回 hub 中对应的 Review 缓存。
 - 同时写入 `localStorage`，hub 不可用时仍可勾选。
-- 重新生成同一 Review 时，会按 todo id / 文本保留完成状态和已 Review 标记，并保留手工添加的备注。
+- 重新生成同一 Review 时，会按 todo id / 文本保留完成状态、已 Review 标记和忽略标记，并保留手工添加的备注。
 - hub 只监听 `127.0.0.1`，不对局域网开放。
 
 ## 目录结构
@@ -295,9 +300,10 @@ diff-viz/
 │   ├── cli.mjs             # 参数解析与命令
 │   ├── collect.mjs         # diff → 依赖图 → 数据文件
 │   ├── diff-parse.mjs      # unified diff 解析 / TODO 扫描
-│   ├── deps.mjs            # JS/TS、Python、Go、Java import 解析
-│   ├── git.mjs             # Git 命令封装
-│   ├── hub.mjs             # 常驻 hub：仓库注册、历史 Review、状态 API
+│   ├── deps.mjs            # JS/TS、Python、Go、Java import 解析 + 扫描缓存
+│   ├── cache.mjs           # 文件级解析缓存（mtime + size）
+│   ├── git.mjs             # Git 命令封装、.git/info/exclude 写入
+│   ├── hub.mjs             # 常驻 hub：仓库注册、历史 Review、watch/SSE、状态 API
 │   ├── server.mjs          # 单 Review HTTP 服务（兼容/测试）
 │   └── util.mjs
 ├── web/                    # React + Vite + Tailwind 前端源码
@@ -352,8 +358,16 @@ npm run package:skill   # 生成 release/diff-viz-skill.zip
    git push origin main --tags
    ```
 
-6. 在 GitHub `Releases` 创建对应 tag 的 release，**把 CHANGELOG 里该版本的内容复制到 release notes**，并上传 `release/diff-viz-skill.zip` 作为 asset。
-7. 确认 CI 通过、Release 页面能下载 asset。
+6. 发布到 npm（包名 `diff-viz-cli`，命令仍是 `diff-viz`）：
+
+   ```bash
+   npm login      # 首次或换机器
+   npm publish    # publishConfig 已声明 public，不需要 --access
+   npx diff-viz-cli --version
+   ```
+
+7. 在 GitHub `Releases` 创建对应 tag 的 release，**把 CHANGELOG 里该版本的内容复制到 release notes**，并上传 `release/diff-viz-skill.zip` 作为 asset。
+8. 确认 CI 通过、npm 上能拉到新版本、Release 页面能下载 asset。
 
 `npm run release:check` 已接入 CI：版本号在 CHANGELOG 中缺失或内容过少时，CI 会失败。
 
@@ -362,13 +376,16 @@ npm run package:skill   # 生成 release/diff-viz-skill.zip
 - 依赖解析是**静态正则/AST 近似**，不执行代码，也不解析运行时动态路径；别名只读取仓库根目录的 tsconfig/jsconfig。Java 同包引用通过标识符近似匹配，注释/字符串中的同名类名可能产生少量误报。
 - 大型 monorepo 超过 15,000 个代码文件时只扫描前 15,000 个，并在 `meta.warnings` 中提示。
 - 二进制文件只标记状态，不渲染文本 Diff。
-- hub 会监听已分析仓库的文件变化并自动重算（700ms 防抖），页面通过 SSE 自动刷新；commit / range 这类历史 Review 不会自动重算。可用 `DIFF_VIZ_NO_WATCH=1` 关闭监听。
-- 数据文件包含完整源码内容，**不要提交到 Git 或分享**。
+- 自动刷新只对 hub **本进程里分析过**的仓库生效；hub 重启后需要再运行一次 `diff-viz` 才会重新挂监听。commit / range 这类历史 Review 不会自动重算。
+- `fs.watch` 的 recursive 模式在 macOS / Windows 可用，Linux 上 Node 不支持，会自动退化为不监听；也可以用 `DIFF_VIZ_NO_WATCH=1` 主动关闭。
+- 数据文件包含完整源码内容，**不要提交到 Git 或分享**；`~/.diff-viz/reviews` 里的缓存同样是完整源码（已收紧到 0600，并按数量自动清理）。
 
 ## 最近版本
 
 | 版本 | 主要内容 |
 | --- | --- |
+| `v0.6.0` | 文件监听 + SSE 自动刷新、解析缓存、影响链路、节点忽略、Review 清理与权限收紧 |
+| `v0.5.0` | 界面内添加/移除仓库、生成文件自动进 `.git/info/exclude` |
 | `v0.4.0` | 版本链条、分支/tag/merge 图、历史 commit Review |
 | `v0.3.0` | 单 hub 复用、仓库切换、历史提交、后台进程管理 |
 | `v0.2.0` | Java 服务依赖解析、同包引用、Java 高亮 |

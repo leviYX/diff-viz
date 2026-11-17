@@ -8,7 +8,15 @@ import { fileURLToPath } from 'node:url';
 import { GitRepo, findRepoRoot } from './git.mjs';
 import { buildReviewData, mergePreviousState } from './collect.mjs';
 import { updateReviewState, openInBrowser } from './server.mjs';
-import { formatTimestamp, readJsonSafe, shortId, writeJsonAtomic } from './util.mjs';
+import {
+  ensurePrivateDir,
+  formatTimestamp,
+  readJsonSafe,
+  shortId,
+  stateHome,
+  toPosix,
+  writeJsonAtomic,
+} from './util.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, '..', 'dist');
@@ -33,16 +41,7 @@ const MIME = {
 };
 
 export function hubHome() {
-  if (process.env.DIFF_VIZ_HOME) return path.resolve(process.env.DIFF_VIZ_HOME);
-  const preferred = path.join(os.homedir(), '.diff-viz');
-  try {
-    fs.mkdirSync(preferred, { recursive: true });
-    fs.accessSync(preferred, fs.constants.W_OK);
-    return preferred;
-  } catch {
-    // Sandboxed agents often allow writes only under the workspace or tmp.
-    return path.join(os.tmpdir(), 'diff-viz-hub');
-  }
+  return stateHome();
 }
 
 export function hubRegistryPath(home = hubHome()) {
@@ -174,18 +173,145 @@ export async function startHub({
   quiet = false,
   home = hubHome(),
 } = {}) {
-  fs.mkdirSync(home, { recursive: true });
+  ensurePrivateDir(home);
   const reviewsDir = path.join(home, 'reviews');
-  fs.mkdirSync(reviewsDir, { recursive: true });
+  ensurePrivateDir(reviewsDir);
+  ensurePrivateDir(path.join(home, 'cache'));
   const projectsFile = path.join(home, 'projects.json');
   const projects = loadProjects(home);
   const reviews = new Map();
+
+  // Review snapshots embed full source, so drop the oldest ones instead of
+  // letting the directory grow without bound. Never drop a project's last review.
+  const pruneReviews = () => {
+    const keep = Math.max(5, Number(process.env.DIFF_VIZ_KEEP_REVIEWS) || 50);
+    let names = [];
+    try {
+      names = fs.readdirSync(reviewsDir).filter((name) => name.endsWith('.json'));
+    } catch {
+      return 0;
+    }
+    if (names.length <= keep) return 0;
+    const protectedIds = new Set(
+      [...projects.values()].map((project) => project.lastReviewId).filter(Boolean),
+    );
+    const stats = names
+      .map((name) => {
+        const file = path.join(reviewsDir, name);
+        try {
+          return { file, name: name.replace(/\.json$/, ''), mtime: fs.statSync(file).mtimeMs };
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.mtime - a.mtime);
+    let removed = 0;
+    for (const item of stats.slice(keep)) {
+      if (protectedIds.has(item.name)) continue;
+      try {
+        fs.rmSync(item.file, { force: true });
+        removed += 1;
+      } catch {
+        /* ignore */
+      }
+    }
+    return removed;
+  };
+
+  // Snapshots created by an older version may still be world-readable.
+  const tightenPermissions = () => {
+    for (const dir of [home, reviewsDir]) {
+      try {
+        fs.chmodSync(dir, 0o700);
+      } catch {
+        /* ignore */
+      }
+    }
+    let names = [];
+    try {
+      names = fs.readdirSync(reviewsDir).filter((name) => name.endsWith('.json'));
+    } catch {
+      return;
+    }
+    for (const name of names) {
+      try {
+        fs.chmodSync(path.join(reviewsDir, name), 0o600);
+      } catch {
+        /* ignore */
+      }
+    }
+    try {
+      fs.chmodSync(projectsFile, 0o600);
+    } catch {
+      /* ignore */
+    }
+  };
+  pruneReviews();
+  tightenPermissions();
 
   const saveProjects = () => {
     writeJsonAtomic(projectsFile, [...projects.values()].sort((a, b) => a.name.localeCompare(b.name)));
   };
 
   const reviewFile = (reviewId) => path.join(reviewsDir, `${safeReviewId(reviewId, 'review')}.json`);
+
+  const sseClients = new Set();
+  const watchers = new Map();
+  const lastPayloads = new Map();
+  const WATCH_IGNORE = /(^|\/)(\.git|node_modules|dist|build|\.next|out|target|vendor|__pycache__|\.venv|venv)(\/|$)/;
+
+  const broadcast = (event) => {
+    const frame = `data: ${JSON.stringify(event)}\n\n`;
+    for (const client of sseClients) {
+      try {
+        client.write(frame);
+      } catch {
+        sseClients.delete(client);
+      }
+    }
+  };
+
+  const scheduleReanalyze = (project) => {
+    const entry = watchers.get(project.id);
+    if (!entry) return;
+    if (entry.timer) clearTimeout(entry.timer);
+    entry.timer = setTimeout(() => {
+      entry.timer = null;
+      const payload = lastPayloads.get(project.id);
+      if (!payload) return;
+      try {
+        const { reviewId } = analyzeProject(project, payload);
+        broadcast({ type: 'review-updated', projectId: project.id, reviewId, at: Date.now() });
+      } catch {
+        /* mid-rebase and other transient states are expected to fail */
+      }
+    }, 700);
+    if (typeof entry.timer.unref === 'function') entry.timer.unref();
+  };
+
+  const watchProject = (project) => {
+    if (process.env.DIFF_VIZ_NO_WATCH === '1' || watchers.has(project.id)) return;
+    let watcher;
+    try {
+      watcher = fs.watch(project.root, { recursive: true, persistent: false }, (_event, filename) => {
+        const relative = typeof filename === 'string' ? toPosix(filename) : '';
+        if (relative && (WATCH_IGNORE.test(relative) || relative.includes('.diff-review-data.json'))) return;
+        scheduleReanalyze(project);
+      });
+    } catch {
+      return;
+    }
+    watcher.on('error', () => {
+      try {
+        watcher.close();
+      } catch {
+        /* ignore */
+      }
+      watchers.delete(project.id);
+    });
+    watchers.set(project.id, { watcher, timer: null });
+  };
 
   const loadReview = (reviewId) => {
     if (reviews.has(reviewId)) return reviews.get(reviewId);
@@ -291,6 +417,8 @@ export async function startHub({
     const previous = loadReview(reviewId);
     if (previous) mergePreviousState(data, previous);
     saveReview(reviewId, data, project.id);
+    lastPayloads.set(project.id, { ...payload, scope });
+    watchProject(project);
     return { reviewId, data };
   };
 
@@ -310,6 +438,12 @@ export async function startHub({
     const previous = loadReview(reviewId);
     if (previous) mergePreviousState(data, previous);
     saveReview(reviewId, data, project.id);
+    // Only working-tree scopes can be re-derived after a file change; commit and
+    // range reviews stay as they were generated.
+    if (inferredScope === 'worktree' || inferredScope === 'staged') {
+      lastPayloads.set(project.id, { scope: inferredScope });
+      watchProject(project);
+    }
     return { reviewId, data };
   };
 
@@ -377,6 +511,29 @@ export async function startHub({
             };
           });
         sendJson(res, 200, { ok: true, commits, all });
+        return;
+      }
+
+      if (pathname === '/api/events') {
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'Cache-Control': 'no-cache, no-transform',
+          Connection: 'keep-alive',
+        });
+        res.write('retry: 3000\n\n');
+        sseClients.add(res);
+        const ping = setInterval(() => {
+          try {
+            res.write(': ping\n\n');
+          } catch {
+            /* closed */
+          }
+        }, 25_000);
+        if (typeof ping.unref === 'function') ping.unref();
+        req.on('close', () => {
+          clearInterval(ping);
+          sseClients.delete(res);
+        });
         return;
       }
 
@@ -507,6 +664,23 @@ export async function startHub({
     home,
     close: () =>
       new Promise((resolve) => {
+        for (const entry of watchers.values()) {
+          if (entry.timer) clearTimeout(entry.timer);
+          try {
+            entry.watcher.close();
+          } catch {
+            /* ignore */
+          }
+        }
+        watchers.clear();
+        for (const client of sseClients) {
+          try {
+            client.end();
+          } catch {
+            /* ignore */
+          }
+        }
+        sseClients.clear();
         server.close(() => {
           const info = readHubInfo(home);
           if (info?.pid === process.pid) {

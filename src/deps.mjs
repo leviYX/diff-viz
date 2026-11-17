@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isProbablyBinary, naturalCompare, readJsonSafe, toPosix } from './util.mjs';
+import { readScanCache, writeScanCache } from './cache.mjs';
 
 const JS_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs', '.vue', '.svelte'];
 const JS_EXTENSION_SET = new Set(JS_EXTENSIONS);
@@ -680,7 +681,21 @@ export function createResolver({
 /* repository scan                                                     */
 /* ------------------------------------------------------------------ */
 
-export function scanRepository(repo, { includeUntracked = true, maxFiles = MAX_SCAN_FILES, gitRef = null } = {}) {
+function extractJavaIdentifiers(source) {
+  const ids = new Set();
+  const re = /\b[A-Z][A-Za-z0-9_$]{1,}\b/g;
+  let match;
+  while ((match = re.exec(source)) !== null) {
+    ids.add(match[0]);
+    if (ids.size >= 500) break;
+  }
+  return [...ids];
+}
+
+export function scanRepository(
+  repo,
+  { includeUntracked = true, maxFiles = MAX_SCAN_FILES, gitRef = null, useCache = true } = {},
+) {
   const warnings = [];
   const allFiles = gitRef
     ? repo.listFilesAt(gitRef)
@@ -721,7 +736,36 @@ export function scanRepository(repo, { includeUntracked = true, maxFiles = MAX_S
   const goModule = loadGoModule(absoluteRoot, readTextAt);
   const workspacePackages = gitRef ? new Map() : loadWorkspacePackages(absoluteRoot);
 
+  // Parsing is a pure function of file content, so an mtime+size key is enough
+  // to skip re-reading unchanged files between runs.
+  const caching = useCache && !gitRef && process.env.DIFF_VIZ_NO_CACHE !== '1';
+  const cached = caching ? readScanCache(repo.root) : { files: {} };
+  const nextCache = {};
+
   for (const filePath of candidates) {
+    const absolute = path.join(absoluteRoot, filePath);
+    let key = null;
+    if (!gitRef) {
+      try {
+        const stat = fs.statSync(absolute);
+        if (!stat.isFile() || stat.size > MAX_SOURCE_BYTES) {
+          skippedLarge += 1;
+          continue;
+        }
+        key = `${Math.round(stat.mtimeMs)}:${stat.size}`;
+      } catch {
+        continue;
+      }
+      if (caching) {
+        const hit = cached.files[filePath];
+        if (hit && hit.key === key && hit.entry) {
+          files.set(filePath, { ...hit.entry });
+          nextCache[filePath] = hit;
+          continue;
+        }
+      }
+    }
+
     let buffer;
     if (gitRef) {
       buffer = repo.show(gitRef, filePath);
@@ -732,12 +776,7 @@ export function scanRepository(repo, { includeUntracked = true, maxFiles = MAX_S
       }
     } else {
       try {
-        const stat = fs.statSync(path.join(absoluteRoot, filePath));
-        if (!stat.isFile() || stat.size > MAX_SOURCE_BYTES) {
-          skippedLarge += 1;
-          continue;
-        }
-        buffer = fs.readFileSync(path.join(absoluteRoot, filePath));
+        buffer = fs.readFileSync(absolute);
       } catch {
         continue;
       }
@@ -752,9 +791,10 @@ export function scanRepository(repo, { includeUntracked = true, maxFiles = MAX_S
     const entry = { imports: extractImports(filePath, source) };
     if (JAVA_EXTENSION_SET.has(path.extname(filePath).toLowerCase())) {
       entry.javaPackage = extractJavaPackage(source);
-      entry.javaText = source;
+      entry.javaIds = extractJavaIdentifiers(source);
     }
     files.set(filePath, entry);
+    if (caching && key) nextCache[filePath] = { key, entry };
   }
 
   const javaIndex = { classes: new Map(), packages: new Map() };
@@ -771,21 +811,21 @@ export function scanRepository(repo, { includeUntracked = true, maxFiles = MAX_S
   }
 
   for (const [filePath, entry] of files) {
-    if (!entry.javaText) continue;
+    if (!entry.javaIds) continue;
     const packageName = entry.javaPackage || '';
     const selfName = path.posix.basename(filePath).replace(/\.java$/i, '');
+    const identifiers = new Set(entry.javaIds);
     const samePackage = [];
     for (const sibling of javaIndex.packages.get(packageName) || []) {
       if (sibling === filePath) continue;
       const simpleName = path.posix.basename(sibling).replace(/\.java$/i, '');
       if (simpleName === selfName) continue;
-      if (new RegExp(`\\b${escapeRegExp(simpleName)}\\b`).test(entry.javaText)) {
-        samePackage.push(sibling);
-      }
+      if (identifiers.has(simpleName)) samePackage.push(sibling);
     }
     entry.javaSamePackageTargets = samePackage.slice(0, 40);
-    delete entry.javaText;
   }
+
+  if (caching) writeScanCache(repo.root, { files: nextCache });
 
   if (skippedLarge > 0) warnings.push(`${skippedLarge} large code files were skipped during dependency scan.`);
 

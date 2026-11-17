@@ -24,6 +24,7 @@ import { cn } from './cn';
 interface PersistedState {
   todos?: Record<string, boolean>;
   reviewed?: Record<string, boolean>;
+  ignored?: Record<string, boolean>;
   extraTodos?: Record<string, ReviewTodo[]>;
 }
 
@@ -110,6 +111,7 @@ export function App() {
   const [showImpacted, setShowImpacted] = useState(true);
   const [todoOverrides, setTodoOverrides] = useState<Record<string, boolean>>({});
   const [reviewedOverrides, setReviewedOverrides] = useState<Record<string, boolean>>({});
+  const [ignoredOverrides, setIgnoredOverrides] = useState<Record<string, boolean>>({});
   const [extraTodos, setExtraTodos] = useState<Record<string, ReviewTodo[]>>({});
   const [serverOnline, setServerOnline] = useState(true);
   const [panelWidths, setPanelWidths] = useState<PanelWidths>(readPanelWidths);
@@ -158,6 +160,7 @@ export function App() {
     const persisted = readPersisted(stateKeyFor(payload.meta));
     setTodoOverrides(persisted.todos ?? {});
     setReviewedOverrides(persisted.reviewed ?? {});
+    setIgnoredOverrides(persisted.ignored ?? {});
     setExtraTodos(persisted.extraTodos ?? {});
     setSelectedId((current) =>
       current && payload.nodes.some((node) => node.id === current) ? current : null,
@@ -309,15 +312,41 @@ export function App() {
       setRefreshing(false);
     }
   }, [currentReviewId, fetchReview]);
+
+  // The hub re-analyzes on file changes and pushes a review id over SSE; pull the
+  // new data only when it belongs to the review currently open in this tab.
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.EventSource === 'undefined') return undefined;
+    const source = new EventSource('/api/events');
+    source.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data) as { type?: string; reviewId?: string };
+        if (payload.type !== 'review-updated') return;
+        if (payload.reviewId && currentReviewId && payload.reviewId !== currentReviewId) return;
+        void refreshReview();
+      } catch {
+        /* ignore malformed frames */
+      }
+    };
+    return () => {
+      source.close();
+    };
+  }, [currentReviewId, refreshReview]);
+
   useEffect(() => {
     if (!data) return;
     try {
-      const payload: PersistedState = { todos: todoOverrides, reviewed: reviewedOverrides, extraTodos };
+      const payload: PersistedState = {
+        todos: todoOverrides,
+        reviewed: reviewedOverrides,
+        ignored: ignoredOverrides,
+        extraTodos,
+      };
       window.localStorage.setItem(storageKey, JSON.stringify(payload));
     } catch {
       /* localStorage may be unavailable; in-memory state still works */
     }
-  }, [data, storageKey, todoOverrides, reviewedOverrides, extraTodos]);
+  }, [data, storageKey, todoOverrides, reviewedOverrides, ignoredOverrides, extraTodos]);
 
   const changedNodes = useMemo(
     () => (data ? data.nodes.filter((node) => node.status !== 'impacted_only') : []),
@@ -455,6 +484,18 @@ export function App() {
     setReviewedOverrides((current) => ({ ...current, [selectedNode.id]: next }));
     void postState({ nodeId: selectedNode.id, reviewed: next });
   }, [selectedNode, isReviewed, postState]);
+
+  const isIgnored = useCallback(
+    (node: ReviewNode) => ignoredOverrides[node.id] ?? Boolean(node.ignored),
+    [ignoredOverrides],
+  );
+
+  const toggleIgnored = useCallback(() => {
+    if (!selectedNode) return;
+    const next = !isIgnored(selectedNode);
+    setIgnoredOverrides((current) => ({ ...current, [selectedNode.id]: next }));
+    void postState({ nodeId: selectedNode.id, ignored: next });
+  }, [selectedNode, isIgnored, postState]);
 
   const addTodo = useCallback(
     async (text: string): Promise<boolean> => {
@@ -628,6 +669,7 @@ export function App() {
                 edgeMode={edgeMode}
                 openTodoCounts={openTodoCounts}
                 reviewedMap={reviewedOverrides}
+                ignoredMap={ignoredOverrides}
                 drawerWidth={selectedNode ? drawerWidth : 0}
                 sidebarWidth={sidebarOpen ? sidebarWidth : 0}
                 onSelect={selectNode}
@@ -692,6 +734,7 @@ export function App() {
               tab={tab}
               todos={selectedTodos}
               reviewed={isReviewed(selectedNode)}
+              ignored={isIgnored(selectedNode)}
               isTodoDone={(todo) => isTodoDone(selectedNode.id, todo)}
               serverOnline={serverOnline}
               onTabChange={setTab}
@@ -699,6 +742,7 @@ export function App() {
               onSelectNode={selectNode}
               onToggleTodo={toggleTodo}
               onToggleReviewed={toggleReviewed}
+              onToggleIgnored={toggleIgnored}
               onAddTodo={addTodo}
             />
           </div>

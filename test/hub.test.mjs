@@ -68,6 +68,23 @@ test('hub registers projects, serves data, lists commits and builds historical r
       updated.nodes.find((node) => node.path === 'src/main/java/com/acme/App.java').reviewed,
       true,
     );
+
+    await fetch(`${server.url}api/state`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        reviewId: reviewResponse.reviewId,
+        nodeId: 'src/main/java/com/acme/App.java',
+        ignored: true,
+      }),
+    });
+    const ignored = await fetch(`${server.url}api/data?review=${reviewResponse.reviewId}`).then((response) =>
+      response.json(),
+    );
+    assert.equal(
+      ignored.nodes.find((node) => node.path === 'src/main/java/com/acme/App.java').ignored,
+      true,
+    );
   } finally {
     await server.close();
     cleanup(repoDir);
@@ -126,6 +143,45 @@ test('projects can be added by path, validated, deduplicated and removed', async
     await server.close();
     cleanup(repoDir);
     cleanup(plainDir);
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+
+test('hub prunes old reviews and keeps state private', async () => {
+  const repoDir = makeTempRepo();
+  write(repoDir, 'a.ts', 'export const a = 1;\n');
+  commitAll(repoDir, 'init');
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'diff-viz-gc-'));
+  const reviewsDir = path.join(home, 'reviews');
+  fs.mkdirSync(reviewsDir, { recursive: true });
+
+  const previous = process.env.DIFF_VIZ_KEEP_REVIEWS;
+  process.env.DIFF_VIZ_KEEP_REVIEWS = '5';
+  // Eight stale snapshots with increasing mtimes.
+  for (let index = 0; index < 8; index += 1) {
+    const file = path.join(reviewsDir, `old-${index}.json`);
+    fs.writeFileSync(file, JSON.stringify({ meta: { reviewId: `old-${index}` }, nodes: [], edges: [] }));
+    const stamp = new Date(Date.now() - (100 - index) * 1000);
+    fs.utimesSync(file, stamp, stamp);
+  }
+
+  const server = await startHub({ port: 0, host: '127.0.0.1', open: false, quiet: true, home });
+  try {
+    const left = fs.readdirSync(reviewsDir).filter((name) => name.endsWith('.json'));
+    assert.equal(left.length, 5);
+    assert.ok(!left.includes('old-0.json'), 'oldest snapshot should be pruned');
+
+    if (process.platform !== 'win32') {
+      assert.equal(fs.statSync(home).mode & 0o777, 0o700);
+      assert.equal(fs.statSync(reviewsDir).mode & 0o777, 0o700);
+      assert.equal(fs.statSync(path.join(reviewsDir, 'old-7.json')).mode & 0o777, 0o600);
+    }
+  } finally {
+    await server.close();
+    if (previous === undefined) delete process.env.DIFF_VIZ_KEEP_REVIEWS;
+    else process.env.DIFF_VIZ_KEEP_REVIEWS = previous;
+    cleanup(repoDir);
     fs.rmSync(home, { recursive: true, force: true });
   }
 });

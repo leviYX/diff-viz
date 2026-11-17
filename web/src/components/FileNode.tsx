@@ -11,12 +11,13 @@ export interface FileNodeData extends Record<string, unknown> {
   selected: boolean;
   openTodos: number;
   reviewed: boolean;
+  ignored: boolean;
 }
 
 export type FileFlowNode = Node<FileNodeData, 'file'>;
 
 function FileNodeComponent({ data }: NodeProps<FileFlowNode>) {
-  const { node, direction, selected, openTodos, reviewed } = data;
+  const { node, direction, selected, openTodos, reviewed, ignored } = data;
   const meta = STATUS_META[node.status];
   const Icon = meta.icon;
   const impacted = node.status === 'impacted_only';
@@ -33,7 +34,7 @@ function FileNodeComponent({ data }: NodeProps<FileFlowNode>) {
         height: impacted ? 74 : 94,
         borderColor: selected ? 'rgba(86,111,208,0.65)' : impacted ? 'rgba(107,124,140,0.28)' : 'rgba(221,213,196,0.95)',
         borderStyle: impacted ? 'dashed' : 'solid',
-        opacity: impacted ? 0.88 : 1,
+        opacity: ignored ? 0.42 : impacted ? 0.88 : 1,
         boxShadow: selected ? undefined : '0 8px 20px -18px rgba(60,50,30,0.35)',
       }}
       title={node.path}

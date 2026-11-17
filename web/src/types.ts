@@ -32,6 +32,8 @@ export interface ReviewNode {
   diffTruncated?: boolean;
   contentTruncated?: boolean;
   reviewed?: boolean;
+  ignored?: boolean;
+  impactChain?: string[];
   depth?: number;
   impactOrigins?: string[];
   imports?: string[];

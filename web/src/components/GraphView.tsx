@@ -27,6 +27,7 @@ interface GraphViewProps {
   edgeMode: EdgeMode;
   openTodoCounts: Record<string, number>;
   reviewedMap: Record<string, boolean>;
+  ignoredMap: Record<string, boolean>;
   drawerWidth?: number;
   sidebarWidth?: number;
   onSelect: (id: string | null) => void;
@@ -112,6 +113,7 @@ function GraphCanvas({
   edgeMode,
   openTodoCounts,
   reviewedMap,
+  ignoredMap,
   drawerWidth = 0,
   sidebarWidth = 0,
   onSelect,
@@ -135,10 +137,11 @@ function GraphCanvas({
           selected: item.node.id === selectedId,
           openTodos: openTodoCounts[item.node.id] || 0,
           reviewed: Boolean(reviewedMap[item.node.id] ?? item.node.reviewed),
+          ignored: Boolean(ignoredMap[item.node.id] ?? item.node.ignored),
         },
         style: { width: item.width, height: item.height },
       })) as FileFlowNode[],
-    [positioned, direction, selectedId, openTodoCounts, reviewedMap],
+    [positioned, direction, selectedId, openTodoCounts, reviewedMap, ignoredMap],
   );
 
   const flowEdges = useMemo<Edge[]>(() => {

@@ -30,6 +30,7 @@
 - **三段式详情**：改动摘要与影响评估、Side-by-Side / Unified 代码 Diff（语法高亮）、待确认 TODO 列表。
 - **Agent 注解**：Agent 可把自己的总结、影响分析、风险点写入 JSON；界面直接展示并支持勾选确认。
 - **单 hub 复用**：多个仓库、多次分析共用一个常驻进程，不再为每次 Review 启动新端口。
+- **实时**：hub 监听文件变化并自动重算，页面通过 SSE 自动刷新，不用手动重跑。
 - **仓库与历史**：界面内按路径添加/移除仓库、切换已注册仓库，通过版本链条浏览最多 80 个提交（含分支、tag、merge），查看历史 commit 的 Diff + 依赖拓扑。
 - **状态持久化**：勾选状态写回 hub 的 Review 缓存，同时备份到 `localStorage`。
 - **零运行时依赖**：CLI 只用 Node.js 内置模块；`dist/` 已包含构建好的前端资源。
@@ -120,8 +121,9 @@ diff-viz annotate \
 | `--base <ref>` | 与目标分支的 merge-base 比较 |
 | `--data <file>` | 数据文件路径，默认 `<repo>/.diff-review-data.json` |
 | `--annotations <file>` | 生成时合并注解 JSON |
+| `--node <path>` | 仅用于 `annotate`：只更新指定节点的注解 |
 | `--summary <text>` | 覆盖整体摘要 |
-| `--impact-depth <n>` | 下游影响深度，默认 2 |
+| `--impact-depth <n>` | 下游影响深度，默认 3（最多 6） |
 | `--max-impact <n>` | 最多展示受影响文件数，默认 120 |
 | `--no-untracked` | 不纳入未跟踪的新文件 |
 | `--json-only` | 只写 JSON，不注册 hub、不启动服务 |
@@ -275,7 +277,7 @@ diff-viz annotate \
 | Go | `import "..."`、import block | `go.mod` 的 module 前缀 → 目录下的 `.go` 文件 |
 | Java | `import com.foo.Bar;`、`import static ...`、`import com.foo.*`、同包类引用 | 按 `package` + 文件名建立 FQCN 索引，支持 Maven/Gradle 的 `src/main/java`、多模块目录 |
 
-影响分析从每个变更文件出发，沿 `被 import` 的反向关系寻找下游文件，最多 `--impact-depth` 层、`--max-impact` 个节点。只展示仓库内文件；`node_modules`、`vendor`、`dist` 等目录会被跳过。
+影响分析从每个变更文件出发，沿 `被 import` 的反向关系寻找下游文件，最多 `--impact-depth` 层（默认 3）、`--max-impact` 个节点，并为每个受影响文件记录 `impactChain`，详情里能看到「A → B → C」的传播路径。只展示仓库内文件；`node_modules`、`vendor`、`dist` 等目录会被跳过。
 
 ## 状态持久化
 
@@ -360,7 +362,7 @@ npm run package:skill   # 生成 release/diff-viz-skill.zip
 - 依赖解析是**静态正则/AST 近似**，不执行代码，也不解析运行时动态路径；别名只读取仓库根目录的 tsconfig/jsconfig。Java 同包引用通过标识符近似匹配，注释/字符串中的同名类名可能产生少量误报。
 - 大型 monorepo 超过 15,000 个代码文件时只扫描前 15,000 个，并在 `meta.warnings` 中提示。
 - 二进制文件只标记状态，不渲染文本 Diff。
-- 不监听文件变化；代码变更后需要重新运行（或点界面刷新读取新 JSON）。
+- hub 会监听已分析仓库的文件变化并自动重算（700ms 防抖），页面通过 SSE 自动刷新；commit / range 这类历史 Review 不会自动重算。可用 `DIFF_VIZ_NO_WATCH=1` 关闭监听。
 - 数据文件包含完整源码内容，**不要提交到 Git 或分享**。
 
 ## 最近版本

@@ -8,6 +8,22 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-17
+
+### Added
+
+- hub 监听已分析仓库的文件变化，700 ms 防抖后自动重算，并通过 SSE（`/api/events`）通知页面刷新；`DIFF_VIZ_NO_WATCH=1` 可关闭。commit / range 类历史 Review 不参与自动重算。
+- 文件级解析缓存：以 `mtime + size` 为 key，只重新解析变化的文件。1200 文件实测冷扫 107 ms、热扫 24 ms；缓存位于 `~/.diff-viz/cache/`，`DIFF_VIZ_NO_CACHE=1` 可关闭。
+- 受影响文件记录 `impactChain`，详情抽屉展示「A → B → C → D」的传播链路。
+- 节点级「忽略」：把与本次改动无关的文件标灰，状态写回 Review 并同步 hub。
+- `annotate --node <path>`：只把注解应用到指定节点。
+
+### Changed
+
+- 影响分析默认深度从 2 提升到 3（`--impact-depth` 仍可调到 6）。
+- 状态目录按数量做 LRU 清理（默认保留最近 50 份，`DIFF_VIZ_KEEP_REVIEWS` 可调），并始终保留各仓库的 `lastReviewId`。
+- `~/.diff-viz` 目录收紧为 0700、Review 文件为 0600，启动时顺带修正历史文件权限。
+
 ## [0.5.0] - 2026-11-17
 
 ### Added

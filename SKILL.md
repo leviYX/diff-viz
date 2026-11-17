@@ -124,7 +124,7 @@ node "$SKILL_DIR/bin/diff-viz.mjs" annotate \
   --annotations .diff-review-annotations.json
 ```
 
-然后在浏览器点右上角刷新按钮。`annotate` 支持 `--annotations -` 从 stdin 读取。
+然后在浏览器点右上角刷新按钮。`annotate` 支持 `--annotations -` 从 stdin 读取。只改单个文件时用 `--node <path>` 过滤。
 
 ## hub 管理
 
@@ -146,7 +146,7 @@ hub 的状态目录默认是 `~/.diff-viz/`；Agent 沙箱不允许写 home 时�
 | `--last` | 分析最近一次提交 |
 | `--range <A..B \| A...B>` | 分析提交范围 |
 | `--base <ref>` | 与目标分支 merge-base 对比 |
-| `--impact-depth <n>` | 下游影响深度，默认 2 |
+| `--impact-depth <n>` | 下游影响深度，默认 3（最多 6） |
 | `--max-impact <n>` | 受影响文件上限，默认 120 |
 | `--no-untracked` | 排除未跟踪的新文件 |
 | `--data <file>` | 数据文件位置 |

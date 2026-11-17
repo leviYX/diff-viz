@@ -1,6 +1,20 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+
+export function stateHome() {
+  if (process.env.DIFF_VIZ_HOME) return path.resolve(process.env.DIFF_VIZ_HOME);
+  const preferred = path.join(os.homedir(), '.diff-viz');
+  try {
+    fs.mkdirSync(preferred, { recursive: true, mode: 0o700 });
+    fs.accessSync(preferred, fs.constants.W_OK);
+    return preferred;
+  } catch {
+    // Sandboxed agents often allow writes only under the workspace or tmp.
+    return path.join(os.tmpdir(), 'diff-viz-hub');
+  }
+}
 
 export function toPosix(p) {
   return p.split(path.sep).join('/').replace(/^\.\//, '');
@@ -34,10 +48,25 @@ export function readJsonSafe(file) {
 
 export function writeJsonAtomic(file, data) {
   const dir = path.dirname(file);
-  fs.mkdirSync(dir, { recursive: true });
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const tmp = path.join(dir, `.${path.basename(file)}.${process.pid}.${Date.now()}.tmp`);
-  fs.writeFileSync(tmp, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
+  // Review data can embed full source files, so keep it owner-only.
+  fs.writeFileSync(tmp, `${JSON.stringify(data, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
   fs.renameSync(tmp, file);
+  try {
+    fs.chmodSync(file, 0o600);
+  } catch {
+    /* best effort on filesystems without POSIX modes */
+  }
+}
+
+export function ensurePrivateDir(dir) {
+  try {
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    fs.chmodSync(dir, 0o700);
+  } catch {
+    /* best effort */
+  }
 }
 
 export function stripAnsi(value) {

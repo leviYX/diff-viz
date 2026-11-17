@@ -20,6 +20,7 @@ export function SummaryTab({ node, data, reviewed, onToggleReviewed, onSelectNod
   const upstream = [...new Set(upstreamPaths)].sort().map((path) => ({ path, node: nodeById.get(path) }));
   const downstream = [...new Set(downstreamPaths)].sort().map((path) => ({ path, node: nodeById.get(path) }));
 
+  const impactChain = (node.impactChain ?? []).filter(Boolean);
   const changedOrigins = (node.impactOrigins ?? [])
     .map((id) => nodeById.get(id))
     .filter((item): item is ReviewNode => Boolean(item));
@@ -106,6 +107,30 @@ export function SummaryTab({ node, data, reviewed, onToggleReviewed, onSelectNod
             empty="没有被本项目内的文件直接引用"
             onSelectNode={onSelectNode}
           />
+          {impactChain.length > 1 ? (
+            <div className="rounded-lg border border-line/70 bg-ink-850/40 px-3 py-2">
+              <div className="mb-1.5 text-[9px] font-medium uppercase tracking-[0.12em] text-mist-600">影响链路</div>
+              <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-[9.5px] text-mist-500">
+                {impactChain.map((path, index) => (
+                  <span key={path} className="flex items-center gap-1">
+                    {index > 0 ? <span className="text-mist-600">→</span> : null}
+                    <button
+                      type="button"
+                      onClick={() => onSelectNode(path)}
+                      className={cn(
+                        'rounded px-1 py-0.5 font-mono transition hover:bg-accent-soft hover:text-accent-bright',
+                        path === node.id ? 'bg-accent-soft text-accent-bright' : 'text-mist-400',
+                      )}
+                      title={path}
+                    >
+                      {path.split('/').slice(-2).join('/')}
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {changedOrigins.length > 0 ? (
             <DependencyRow
               label="变更来源"

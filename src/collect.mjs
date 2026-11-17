@@ -462,11 +462,12 @@ export function buildReviewData(repo, options = {}) {
   }
 
   const changedIds = new Set(changedFiles.map((node) => node.path));
-  const impactDepth = Math.max(1, Math.min(Number(options.impactDepth) || 2, 6));
+  const impactDepth = Math.max(1, Math.min(Number(options.impactDepth) || 3, 6));
   const maxImpact = Math.max(1, Math.min(Number(options.maxImpact) || 120, 500));
   const impacted = [];
   const impactedDepths = new Map();
   const impactOrigins = new Map();
+  const impactParent = new Map();
   const queue = [];
   for (const node of changedFiles) {
     impactedDepths.set(node.path, 0);
@@ -475,6 +476,7 @@ export function buildReviewData(repo, options = {}) {
       if (!impactedDepths.has(dependent)) {
         impactedDepths.set(dependent, 1);
         impactOrigins.set(dependent, new Set([node.path]));
+        impactParent.set(dependent, node.path);
         queue.push({ path: dependent, depth: 1 });
       } else {
         impactOrigins.get(dependent)?.add(node.path);
@@ -489,6 +491,7 @@ export function buildReviewData(repo, options = {}) {
       if (changedIds.has(dependent) || impactedDepths.has(dependent)) continue;
       impactedDepths.set(dependent, current.depth + 1);
       impactOrigins.set(dependent, new Set(impactOrigins.get(current.path) || []));
+      impactParent.set(dependent, current.path);
       queue.push({ path: dependent, depth: current.depth + 1 });
       if (queue.length > maxImpact * 6) break;
     }
@@ -501,6 +504,18 @@ export function buildReviewData(repo, options = {}) {
   if (impactedList.length > maxImpact) {
     warnings.push(`影响面过大，仅展示 ${maxImpact} 个下游文件（共 ${impactedList.length} 个）。`);
   }
+
+  const chainFor = (id) => {
+    const chain = [];
+    const seen = new Set();
+    let current = id;
+    while (current && !seen.has(current)) {
+      seen.add(current);
+      chain.unshift(current);
+      current = impactParent.get(current);
+    }
+    return chain;
+  };
 
   for (const [id, depth] of impactedList.slice(0, maxImpact)) {
     impacted.push({
@@ -518,6 +533,7 @@ export function buildReviewData(repo, options = {}) {
       language: languageOf(id),
       depth,
       impactOrigins: [...(impactOrigins.get(id) || [])].sort(naturalCompare),
+      impactChain: chainFor(id),
     });
   }
 
@@ -654,8 +670,9 @@ function normalizeTodo(raw, nodePath, index) {
   };
 }
 
-export function applyAnnotations(data, annotations) {
+export function applyAnnotations(data, annotations, { onlyPaths = null } = {}) {
   if (!annotations || typeof annotations !== 'object') return data;
+  const allowed = onlyPaths && onlyPaths.length ? new Set(onlyPaths) : null;
   const meta = annotations.meta ?? {};
   if (annotations.overallSummary || meta.overallSummary) {
     data.meta.overallSummary = String(annotations.overallSummary || meta.overallSummary);
@@ -674,6 +691,7 @@ export function applyAnnotations(data, annotations) {
   for (const [key, annotation] of entries) {
     const node = byId.get(key);
     if (!node) continue;
+    if (allowed && !allowed.has(key)) continue;
     if (typeof annotation.summary === 'string') {
       node.summary = annotation.summary;
       node.summarySource = 'agent';

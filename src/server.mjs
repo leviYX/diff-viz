@@ -95,6 +95,7 @@ export function updateReviewState(dataPath, payload) {
     todo.completed = Boolean(payload.completed);
   }
   if (payload.reviewed !== undefined) node.reviewed = Boolean(payload.reviewed);
+  if (payload.ignored !== undefined) node.ignored = Boolean(payload.ignored);
   data.meta.updatedAt = formatTimestamp();
   writeJsonAtomic(dataPath, data);
   return { ok: true };

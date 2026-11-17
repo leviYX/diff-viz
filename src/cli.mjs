@@ -29,6 +29,7 @@ diff-viz · 本地代码变更可视化 Review 工具
 输出与界面:
   --data <file>           数据文件路径 (默认 <repo>/.diff-review-data.json)
   --annotations <file>    生成时合并注解文件 (JSON，见 SKILL.md)
+  --node <path>           annotate 时只更新指定节点
   --summary <text>        覆盖整体摘要
   --json-only             仅生成 JSON，不启动界面
   --port <n>              hub 端口 (默认 5173，被占用时自动 +1)
@@ -36,7 +37,7 @@ diff-viz · 本地代码变更可视化 Review 工具
   --no-open               不自动打开浏览器
 
 分析:
-  --impact-depth <n>      下游影响分析深度 (默认 2)
+  --impact-depth <n>      下游影响分析深度 (默认 3)
   --max-impact <n>        最多展示多少个受影响文件 (默认 120)
   --no-untracked          不把未跟踪的新文件纳入 Review
   --repo <dir>            指定仓库目录 (默认当前目录)
@@ -71,6 +72,7 @@ const VALUE_FLAGS = new Set([
   'impact-depth',
   'max-impact',
   'repo',
+  'node',
 ]);
 
 function toCamel(name) {
@@ -251,7 +253,7 @@ export async function main(argv = process.argv.slice(2)) {
     const data = readJsonSafe(dataPath);
     if (!data) throw new Error(`找不到数据文件：${dataPath}，请先运行 diff-viz。`);
     const annotations = readAnnotations(options.annotations);
-    applyAnnotations(data, annotations);
+    applyAnnotations(data, annotations, { onlyPaths: options.node ? [String(options.node)] : null });
     if (options.summary) data.meta.overallSummary = options.summary;
     data.meta.updatedAt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
     writeJsonAtomic(dataPath, data);

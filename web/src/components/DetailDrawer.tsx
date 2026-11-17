@@ -6,6 +6,7 @@ import {
   FileCode2,
   GitCompareArrows,
   ListChecks,
+  EyeOff,
   Sparkles,
   X,
 } from 'lucide-react';
@@ -23,6 +24,7 @@ interface DetailDrawerProps {
   tab: DrawerTab;
   todos: ReviewTodo[];
   reviewed: boolean;
+  ignored: boolean;
   isTodoDone: (todo: ReviewTodo) => boolean;
   serverOnline: boolean;
   onTabChange: (tab: DrawerTab) => void;
@@ -30,6 +32,7 @@ interface DetailDrawerProps {
   onSelectNode: (id: string) => void;
   onToggleTodo: (todo: ReviewTodo, completed: boolean) => void;
   onToggleReviewed: () => void;
+  onToggleIgnored: () => void;
   onAddTodo: (text: string) => Promise<boolean>;
 }
 
@@ -39,6 +42,7 @@ export function DetailDrawer({
   tab,
   todos,
   reviewed,
+  ignored,
   isTodoDone,
   serverOnline,
   onTabChange,
@@ -46,6 +50,7 @@ export function DetailDrawer({
   onSelectNode,
   onToggleTodo,
   onToggleReviewed,
+  onToggleIgnored,
   onAddTodo,
 }: DetailDrawerProps) {
   const [copied, setCopied] = useState(false);
@@ -139,6 +144,20 @@ export function DetailDrawer({
           >
             {reviewed ? <CheckCircle2 size={11} /> : <Circle size={11} />}
             {reviewed ? '已 Review' : '标记 Review'}
+          </button>
+          <button
+            type="button"
+            onClick={onToggleIgnored}
+            title={ignored ? '取消忽略' : '标记为无关改动，图上弱化显示'}
+            className={cn(
+              'flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-[9.5px] transition',
+              ignored
+                ? 'border-line bg-ink-800 text-mist-400'
+                : 'border-line bg-ink-850 text-mist-600 hover:border-accent/30 hover:text-mist-300',
+            )}
+          >
+            <EyeOff size={11} />
+            {ignored ? '已忽略' : '忽略'}
           </button>
         </div>
 

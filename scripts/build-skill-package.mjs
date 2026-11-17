@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 /**
- * Build a self-contained skill package that can be dropped into
- * `~/.cursor/skills/` or `.cursor/skills/` without npm install.
+ * Build the Agent Skill package.
  *
- * The runtime has no dependencies, so only bin/src/dist plus the skill docs
- * are needed. node_modules, tests, web sources and screenshots are excluded.
+ * Default (thin): only SKILL.md + INSTALL.md + LICENSE. The CLI is installed
+ * separately from npm, so the skills directory no longer needs bin/src/dist.
+ *
+ * `--standalone` keeps the old self-contained layout (bin/src/dist + SKILL.md)
+ * for offline / air-gapped environments.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -12,58 +14,91 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const standalone = process.argv.includes('--standalone');
 const releaseDir = path.join(root, 'release');
 const skillDir = path.join(releaseDir, 'diff-viz');
 const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 
-fs.rmSync(releaseDir, { recursive: true, force: true });
+fs.mkdirSync(releaseDir, { recursive: true });
+fs.rmSync(skillDir, { recursive: true, force: true });
 fs.mkdirSync(skillDir, { recursive: true });
 
-for (const entry of ['bin', 'src', 'dist']) {
-  fs.cpSync(path.join(root, entry), path.join(skillDir, entry), { recursive: true });
-}
 for (const file of ['SKILL.md', 'LICENSE']) {
   fs.copyFileSync(path.join(root, file), path.join(skillDir, file));
 }
 
-const manifest = {
-  name: 'diff-viz',
-  version,
-  private: true,
-  type: 'module',
-  description: 'Local git change review visualizer packaged as an Agent Skill.',
-  bin: { 'diff-viz': 'bin/diff-viz.mjs' },
-  engines: { node: '>=20' },
-  license: 'MIT',
-};
-fs.writeFileSync(path.join(skillDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+if (standalone) {
+  for (const entry of ['bin', 'src', 'dist']) {
+    fs.cpSync(path.join(root, entry), path.join(skillDir, entry), { recursive: true });
+  }
 
-fs.writeFileSync(
-  path.join(skillDir, 'INSTALL.md'),
-  `# diff-viz skill
+  const manifest = {
+    name: 'diff-viz',
+    version,
+    private: true,
+    type: 'module',
+    description: 'Local git change review visualizer packaged as a self-contained Agent Skill.',
+    bin: { 'diff-viz': 'bin/diff-viz.mjs' },
+    engines: { node: '>=20' },
+    license: 'MIT',
+  };
+  fs.writeFileSync(path.join(skillDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 
-直接使用：
+  fs.writeFileSync(
+    path.join(skillDir, 'INSTALL.md'),
+    `# diff-viz skill（离线自包含）
 
-1. 把整个 \`diff-viz\` 目录放到 \`~/.cursor/skills/\` 或项目的 \`.cursor/skills/\`。
-2. 重新加载 Cursor / 新开 Agent 会话。
-3. 输入 \`/diff-viz review 当前改动\`，或让 Agent 使用 \`diff-viz\` skill。
+本目录包含 \`bin/src/dist\`，不需要 npm install。
 
-不依赖 npm install；需要 Node.js >= 20 和 Git。
-
-命令行也可以直接运行：
+1. 把整个 \`diff-viz\` 目录放到 \`~/.cursor/skills/\` 或项目的 \`.cursor/skills/\`（DSH 用 \`~/.dsh/skills/\`）。
+2. 重新加载 Agent / 新开会话。
+3. 如果系统没有全局 \`diff-viz\` 命令，让 Agent 使用：
 
 \`\`\`bash
-node <本目录>/bin/diff-viz.mjs --no-open
+node "<本目录>/bin/diff-viz.mjs" --no-open
 \`\`\`
-`,
-);
 
-const zipPath = path.join(releaseDir, 'diff-viz-skill.zip');
+需要 Node.js >= 20 和 Git。版本：${version}
+`,
+  );
+} else {
+  fs.writeFileSync(
+    path.join(skillDir, 'INSTALL.md'),
+    `# diff-viz skill（thin）
+
+这个目录只需要 \`SKILL.md\`；运行时通过 npm 安装，不要把 \`bin/src/dist\` 复制进 skills 目录。
+
+1. 安装 CLI：
+
+\`\`\`bash
+npm install -g diff-viz-cli
+# 或 pnpm add -g diff-viz-cli
+\`\`\`
+
+2. 注册 skill：
+
+\`\`\`bash
+diff-viz skill install --agent dsh   # dsh | claude | cursor | agents
+\`\`\`
+
+也可以手动把本目录复制到 \`<agent>/skills/diff-viz\`。
+
+3. 新开一个 Agent 会话，技能列表里会出现 \`diff-viz\`。
+
+版本：${version}
+`,
+  );
+}
+
+const zipName = standalone ? 'diff-viz-skill-standalone.zip' : 'diff-viz-skill.zip';
+const zipPath = path.join(releaseDir, zipName);
+fs.rmSync(zipPath, { force: true });
 try {
-  execFileSync('zip', ['-qr', path.basename(zipPath), path.basename(skillDir)], {
+  execFileSync('zip', ['-qr', zipName, path.basename(skillDir)], {
     cwd: releaseDir,
     stdio: 'inherit',
   });
+  console.log(`Mode:         ${standalone ? 'standalone' : 'thin'}`);
   console.log(`Skill folder: ${skillDir}`);
   console.log(`Zip:          ${zipPath}`);
 } catch (error) {

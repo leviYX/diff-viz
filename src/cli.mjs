@@ -5,6 +5,7 @@ import { ensureGitExcluded, findRepoRoot, GitRepo } from './git.mjs';
 import { applyAnnotations, buildReviewData, mergePreviousState } from './collect.mjs';
 import { ensureHub, hubIsAlive, readHubInfo, startHub, stopHub } from './hub.mjs';
 import { openInBrowser } from './server.mjs';
+import { AGENTS, agentNames, installSkill } from './skill.mjs';
 import { readJsonSafe, writeJsonAtomic } from './util.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -19,6 +20,7 @@ diff-viz · 本地代码变更可视化 Review 工具
   diff-viz annotate [选项]           将 Agent/人工总结合并进数据文件
   diff-viz hub [选项]                前台启动常驻 hub（只启动一次）
   diff-viz stop                      停止本地 hub
+  diff-viz skill install [选项]      把薄 SKILL.md 注册到 Agent 技能目录
 
 范围 (默认: 工作区有改动则看工作区，否则看最近一次提交):
   --staged                仅查看已暂存 (git diff --cached)
@@ -42,10 +44,39 @@ diff-viz · 本地代码变更可视化 Review 工具
   --no-untracked          不把未跟踪的新文件纳入 Review
   --repo <dir>            指定仓库目录 (默认当前目录)
 
+Skill:
+  --agent <name>          dsh | claude | cursor | agents（默认 dsh）
+  --scope <user|project>  安装到用户级或项目级（默认 user）
+  --dir <dir>             自定义 skills 根目录
+  --copy                  复制 SKILL.md（默认 symlink）
+  --force                 覆盖已有安装
+  --dry-run               只打印目标路径
+
 其他:
   -h, --help              显示帮助
   -v, --version           显示版本
   --quiet                 减少日志
+`;
+
+const SKILL_HELP = `
+diff-viz skill install · 把 thin SKILL.md 注册到 Agent 技能目录
+
+用法:
+  diff-viz skill install [选项]
+
+选项:
+  --agent <name>           dsh | claude | cursor | agents（默认 dsh）
+  --scope <user|project>   用户级或项目级（默认 user）
+  --dir <dir>              自定义 skills 根目录（覆盖 agent/scope）
+  --copy                   复制 SKILL.md，不建 symlink
+  --force                  覆盖已有安装
+  --dry-run                只显示目标路径，不写入
+  -h, --help               显示帮助
+
+示例:
+  diff-viz skill install --agent dsh
+  diff-viz skill install --agent claude --scope project
+  diff-viz skill install --dir ~/.config/my-agent/skills --copy
 `;
 
 const BOOLEAN_FLAGS = new Set([
@@ -212,7 +243,91 @@ async function keepAlive(server) {
   });
 }
 
+function runSkillCommand(argv) {
+  if (argv.length === 0 || argv.includes('-h') || argv.includes('--help')) {
+    process.stdout.write(SKILL_HELP);
+    return;
+  }
+
+  let subcommand = null;
+  const options = { agent: 'dsh', scope: 'user' };
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === 'install' && !subcommand) {
+      subcommand = arg;
+      continue;
+    }
+    if (arg === '--agent' || arg === '--scope' || arg === '--dir') {
+      const value = argv[++index];
+      if (value === undefined || value.startsWith('--')) throw new Error(`参数 ${arg} 需要一个值`);
+      options[arg.slice(2)] = value;
+      continue;
+    }
+    if (arg === '--copy') {
+      options.copy = true;
+      continue;
+    }
+    if (arg === '--force') {
+      options.force = true;
+      continue;
+    }
+    if (arg === '--dry-run') {
+      options.dryRun = true;
+      continue;
+    }
+    throw new Error(`无法识别的参数：${arg}`);
+  }
+
+  if (subcommand !== 'install') {
+    throw new Error('用法：diff-viz skill install [选项]（运行 diff-viz skill --help 查看帮助）');
+  }
+  if (!['user', 'project'].includes(options.scope)) {
+    throw new Error(`未知 scope：${options.scope}。可选：user / project`);
+  }
+  if (!options.dir && !AGENTS[options.agent]) {
+    throw new Error(`未知 agent：${options.agent}。可选：${agentNames().join(' / ')}`);
+  }
+
+  let cwd = process.cwd();
+  if (options.scope === 'project' && !options.dir) {
+    try {
+      cwd = findRepoRoot(cwd);
+    } catch {
+      /* fall back to cwd when this is not a Git repository */
+    }
+  }
+
+  const result = installSkill({
+    source: path.resolve(__dirname, '..', 'SKILL.md'),
+    ...options,
+    cwd,
+  });
+  const verb = {
+    installed: '已安装',
+    replaced: '已替换',
+    unchanged: '已经安装',
+    'dry-run': '将安装',
+  }[result.status] || '已处理';
+
+  process.stdout.write(`\n  ✔ ${verb} diff-viz skill（${result.method}）\n`);
+  process.stdout.write(`  目标    ${result.target}\n`);
+  if (result.status === 'dry-run') {
+    process.stdout.write('  模式    --dry-run，未写入磁盘\n\n');
+    return;
+  }
+  process.stdout.write('  下一步  新开一个 Agent 会话，技能列表里会出现 diff-viz\n');
+  if (!options.dir && options.scope === 'user') {
+    process.stdout.write(`  可用    diff-viz skill install --agent ${options.agent} --scope project\n`);
+  }
+  process.stdout.write('\n');
+}
+
 export async function main(argv = process.argv.slice(2)) {
+  if (argv[0] === 'skill') {
+    runSkillCommand(argv.slice(1));
+    return;
+  }
+
   const options = parseArgs(argv);
   if (options.help) {
     process.stdout.write(HELP);

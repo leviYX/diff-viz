@@ -7,15 +7,25 @@ description: Use after completing code changes when the user wants to review a g
 
 把一次 Git 变更转成「变更 + 依赖拓扑 + Diff + 待确认项」的可视化 Review 页面。工具是零运行时依赖的 Node CLI，自带构建好的前端；在本机启动 HTTP 服务并打开浏览器。
 
-> **路径约定**：下文 `$SKILL_DIR` 指本 `SKILL.md` 所在目录（DSH、Cursor 等加载 skill 时都会给出该文件的绝对路径）。执行前先替换成真实路径，或在 shell 中执行：
->
-> ```bash
-> export SKILL_DIR="/absolute/path/to/diff-viz"
-> ```
->
-> 不要把 `$SKILL_DIR` 原样交给 shell。
->
-> 如果已经通过 npm 安装，也可以把下文所有 `node "$SKILL_DIR/bin/diff-viz.mjs"` 换成 `diff-viz`（全局安装）或 `npx -y diff-viz-cli`（临时运行）。
+## 安装
+
+Agent 技能目录只需要本 `SKILL.md`；CLI 独立安装，不需要把 `bin/src/dist` 复制进 skills 目录。
+
+```bash
+# 1. 安装 CLI（任选其一）
+npm install -g diff-viz-cli
+pnpm add -g diff-viz-cli
+
+# 2. 注册 skill（自动创建薄 SKILL.md 链接）
+diff-viz skill install --agent dsh      # dsh | claude | cursor | agents
+```
+
+手动安装：把本文件放到 `<agent>/skills/diff-viz/SKILL.md` 即可。
+
+> **命令约定**：下文所有 `diff-viz` 指已安装的 CLI。
+> - 如果 `diff-viz` 不在 PATH，用 `npx -y diff-viz-cli` 代替。
+> - 只有从源码目录直接运行、且本文件所在目录包含 `bin/diff-viz.mjs` 时，才用 `node "$SKILL_DIR/bin/diff-viz.mjs"`（`$SKILL_DIR` 指本 `SKILL.md` 所在目录）。
+> - 不需要 `dist/` 或 `npm install`；npm 包已经包含前端构建产物。
 
 ## 何时使用
 
@@ -27,8 +37,8 @@ description: Use after completing code changes when the user wants to review a g
 ## 前置条件
 
 - Node.js >= 20，当前目录位于 Git 仓库内。
-- `diff-viz` 目录中已包含 `dist/`；不需要额外 `npm install` 即可运行。
-- 如果前端源码被修改过，先执行 `npm install && npm run build`。
+- 已安装 `diff-viz` CLI，或允许用 `npx -y diff-viz-cli` 临时运行。
+- 本 skill 只需要 `SKILL.md`；不要把整个工具包复制到 skills 目录。
 
 ## 标准流程（Agent 必须按此顺序）
 
@@ -77,7 +87,7 @@ git diff --stat
 ### 3. 生成数据并启动界面
 
 ```bash
-node "$SKILL_DIR/bin/diff-viz.mjs" \
+diff-viz \
   --annotations .diff-review-annotations.json \
   --port 5173
 ```
@@ -101,7 +111,7 @@ node "$SKILL_DIR/bin/diff-viz.mjs" \
 ## 只生成数据（CI / 无浏览器）
 
 ```bash
-node "$SKILL_DIR/bin/diff-viz.mjs" --json-only --quiet --data .diff-review-data.json
+diff-viz --json-only --quiet --data .diff-review-data.json
 ```
 
 stdout 是纯 JSON：
@@ -113,7 +123,7 @@ stdout 是纯 JSON：
 ## 重新打开已有结果
 
 ```bash
-node "$SKILL_DIR/bin/diff-viz.mjs" serve --data .diff-review-data.json --port 5173
+diff-viz serve --data .diff-review-data.json --port 5173
 ```
 
 `serve` 会把该数据注册到正在运行的 hub，然后退出；不会新开端口。
@@ -121,7 +131,7 @@ node "$SKILL_DIR/bin/diff-viz.mjs" serve --data .diff-review-data.json --port 51
 ## 追加/更新 Agent 注解（不重启服务）
 
 ```bash
-node "$SKILL_DIR/bin/diff-viz.mjs" annotate \
+diff-viz annotate \
   --data .diff-review-data.json \
   --annotations .diff-review-annotations.json
 ```
@@ -132,10 +142,10 @@ node "$SKILL_DIR/bin/diff-viz.mjs" annotate \
 
 ```bash
 # 前台启动/查看 hub
-node "$SKILL_DIR/bin/diff-viz.mjs" hub
+diff-viz hub
 
 # 停止后台 hub
-node "$SKILL_DIR/bin/diff-viz.mjs" stop
+diff-viz stop
 ```
 
 hub 的状态目录默认是 `~/.diff-viz/`；Agent 沙箱不允许写 home 时会自动落到系统临时目录。也可以用 `DIFF_VIZ_HOME` 显式指定。
@@ -208,8 +218,10 @@ hub 的状态目录默认是 `~/.diff-viz/`；Agent 沙箱不允许写 home 时�
 
 ## 故障排查
 
+- **`diff-viz: command not found`**：先 `npm install -g diff-viz-cli`，或把命令换成 `npx -y diff-viz-cli`。
+- **skill 没出现在 Agent 技能列表**：运行 `diff-viz skill install --agent dsh`（或 claude / cursor），确认目标文件是 `<skills>/diff-viz/SKILL.md`，然后新开一个 Agent 会话。
 - **`当前目录不是 Git 仓库`**：在仓库根目录运行，或加 `--repo <dir>`。
-- **页面 404 / 空白**：确认 `dist/index.html` 存在；源码有改动时执行 `npm run build`。
+- **页面 404 / 空白**：npm 包已包含 `dist/`；如果是源码运行，执行 `npm run build`。
 - **端口占用**：CLI 会自动 +1；从输出里读取实际 URL，或显式 `--port 5180`。
 - **没有依赖边**：确认 import 路径能被静态解析（别名需要根目录 tsconfig/jsconfig 的 `baseUrl`/`paths`），以及文件在仓库内。
 - **TODO 没出现**：只扫描本次 Diff 的**新增行**；已有代码里的 TODO 不会重复列出。

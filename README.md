@@ -178,6 +178,25 @@ diff-viz annotate \
 3. 运行 `diff-viz --annotations` 生成数据并拉起界面。
 4. 把本地 URL 和整体摘要告诉用户。
 
+### 安装 Agent Skill
+
+`SKILL.md` 是薄适配层：只注册这一个文件，CLI 仍然通过 npm 安装，不需要把整个包复制进 skills 目录。
+
+```bash
+# 用户级：DSH / Claude Code / Cursor
+diff-viz skill install --agent dsh
+diff-viz skill install --agent claude
+diff-viz skill install --agent cursor
+
+# 项目级
+diff-viz skill install --agent cursor --scope project
+
+# 自定义目录 / 复制而不是软链
+diff-viz skill install --dir ~/.config/my-agent/skills --copy
+```
+
+支持 `--dry-run` 先看目标路径，`--force` 覆盖已有安装。安装后新开一个 Agent 会话，技能列表里就会出现 `diff-viz`。
+
 注解文件格式：
 
 ```json
@@ -322,7 +341,8 @@ npm test
 npm run typecheck
 npm run release:check   # 校验当前版本在 CHANGELOG.md 中有发布说明
 npm run demo            # 创建 .demo 演示仓库并启动界面
-npm run package:skill   # 生成 release/diff-viz-skill.zip
+npm run package:skill   # 生成薄 skill 包 release/diff-viz-skill.zip（只含 SKILL.md）
+npm run package:skill:standalone  # 可选：离线自包含包（含 bin/src/dist）
 ```
 
 前端技术栈：React 18、Vite、Tailwind CSS v4、`@xyflow/react`、`dagre`、`react-diff-viewer-continued`、`lucide-react`。
@@ -344,7 +364,8 @@ npm run package:skill   # 生成 release/diff-viz-skill.zip
 
    ```bash
    npm run build
-   npm run package:skill
+   npm run package:skill              # 薄包：release/diff-viz-skill.zip
+   npm run package:skill:standalone   # 可选：离线自包含包
    npm pack --dry-run          # 确认 tarball 只包含 bin/src/dist 与文档
    ```
 

@@ -8,6 +8,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- `diff-viz skill install`：把薄 `SKILL.md` 注册到 DSH / Claude Code / Cursor / 共享 agents 技能目录，支持 `--agent`、`--scope user|project`、`--dir`、`--copy`、`--force`、`--dry-run`。
+- 安装后 skill 目录里只需要 `SKILL.md`，不再需要复制 `bin/src/dist`。
+
+### Changed
+
+- `SKILL.md` 的命令改为使用已安装的 `diff-viz`（不在 PATH 时用 `npx -y diff-viz-cli`），源码/离线模式才回退到 `$SKILL_DIR/bin/diff-viz.mjs`。
+- `npm run package:skill` 默认生成只含 `SKILL.md` 的薄包；离线自包含包改用 `npm run package:skill:standalone`。
+
 ## [0.6.0] - 2026-11-17
 
 ### Added

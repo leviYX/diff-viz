@@ -34,23 +34,48 @@ npm install -g diff-viz-cli
 diff-viz --no-open
 ```
 
+如果 Agent 支持 Skills，再注册一次薄 skill（只链接 `SKILL.md`）：
+
+```bash
+diff-viz skill install --agent dsh      # DeepSeek Harness
+diff-viz skill install --agent claude   # Claude Code
+diff-viz skill install --agent cursor --scope project
+```
+
+## DeepSeek Harness (DSH)
+
+DSH 从 `~/.dsh/skills`（用户级）或 `<项目>/.dsh/skills`（项目级）发现 skill：
+
+```bash
+npm install -g diff-viz-cli
+diff-viz skill install --agent dsh                  # 用户级
+diff-viz skill install --agent dsh --scope project  # 项目级
+```
+
+安装后新开一个 DSH 会话，技能目录里会出现 `diff-viz`。如果只想临时用、不注册 skill，直接让 Agent 运行 `npx -y diff-viz-cli --no-open` 即可。
+
 ## Claude Code
 
-Claude Code 支持 `SKILL.md` 形式的 Agent Skills。把 npm 包里的工具目录链接到技能目录即可（`SKILL.md` 的相对路径和 `bin/` 都保留）：
+Claude Code 支持 `SKILL.md` 形式的 Agent Skills。安装 CLI 后，用内置命令注册薄 skill 即可（只链接 `SKILL.md`，不复制 `bin/src/dist`）：
 
 ```bash
 npm install -g diff-viz-cli
 
 # 用户级（所有项目可用）
-mkdir -p ~/.claude/skills
-ln -s "$(npm root -g)/diff-viz-cli" ~/.claude/skills/diff-viz
+diff-viz skill install --agent claude
 
-# 或项目级
-mkdir -p .claude/skills
-ln -s "$(npm root -g)/diff-viz-cli" .claude/skills/diff-viz
+# 或项目级（把 .claude/skills/diff-viz 提交到仓库）
+diff-viz skill install --agent claude --scope project
 ```
 
-如果是从源码使用，把上面的 `$(npm root -g)/diff-viz-cli` 换成 clone 下来的目录路径即可。
+等价的手动方式：
+
+```bash
+mkdir -p ~/.claude/skills/diff-viz
+ln -s "$(npm root -g)/diff-viz-cli/SKILL.md" ~/.claude/skills/diff-viz/SKILL.md
+```
+
+如果是从源码使用，把 `$(npm root -g)/diff-viz-cli/SKILL.md` 换成 clone 目录里的 `SKILL.md` 即可。
 
 之后在 Claude Code 中直接说：
 
@@ -90,7 +115,7 @@ When the user asks for a visual review, or after a multi-file change:
 4. Never commit `.diff-review-data.json` or the annotations file.
 ```
 
-然后在 Cursor 的 Agent 中要求「visual review / 变更拓扑」。如果当前 Cursor 版本支持 Agent Skills，也可以把 `SKILL.md` 链接到对应的 skills 目录。
+然后在 Cursor 的 Agent 中要求「visual review / 变更拓扑」。如果当前 Cursor 版本支持 Agent Skills，运行 `diff-viz skill install --agent cursor --scope project` 注册即可（只链接 `SKILL.md`）。
 
 Cursor 有内置 Browser/Preview 时可以直接打开 localhost；否则用系统浏览器。
 

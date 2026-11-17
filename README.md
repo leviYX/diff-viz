@@ -336,7 +336,7 @@ npm run package:skill   # 生成 release/diff-viz-skill.zip
 3. 更新 `package.json` 版本：
 
    ```bash
-   npm version 0.6.2 --no-git-tag-version
+   npm version 0.7.0 --no-git-tag-version
    npm run release:check
    ```
 
@@ -352,8 +352,8 @@ npm run package:skill   # 生成 release/diff-viz-skill.zip
 
    ```bash
    git add -A
-   git commit -m "Release v0.6.2"
-   git tag -a v0.6.2 -m "v0.6.2"
+   git commit -m "Release v0.7.0"
+   git tag -a v0.7.0 -m "v0.7.0"
    git push origin main --tags
    ```
 
@@ -361,13 +361,15 @@ npm run package:skill   # 生成 release/diff-viz-skill.zip
 
    ```bash
    npm login      # 首次或换机器
-   npm stage publish
-   npm stage list
-   npm stage approve <stage-id>   # 需要 2FA；审批通过后才会出现在 latest
+   npm publish    # 会先跑 prepublishOnly（release check / typecheck / test / build）
+   npm view diff-viz-cli version --prefer-online
    npx diff-viz-cli@latest --version
    ```
 
-   `publishConfig` 已声明 public，不需要 `--access`。npm 对新包/部分账号启用了 **staged publishing**：第一次发布时仓库里会出现一个 `0.0.0-stage` 占位版本，真实版本必须先 `npm stage publish`，再由维护者 2FA 审批（`npm stage approve` 或在 npmjs.com 的 Staged Packages 页面点 Approve）才会公开。`npm stage` 需要 npm >= 11.15；本机版本较旧时可用 `npx npm@11.21.2 stage ...`。注意 `npm stage approve` 也要在真实终端里执行，才能交互输入 OTP。
+   `publishConfig` 已声明 public，不需要 `--access`。注意两点：
+
+   - 新包第一次发布时，registry 会先创建一个公开的 `0.0.0-stage` 占位版本，真实版本可能延迟几分钟才在 `npm view` 里可见；以 npmjs.com 页面或 `--prefer-online` 的结果为准，不要因为刚发布后仍看到 404 就重复改版本号。
+   - 如果账号/团队启用了 staged publishing，`npm publish` 会被替换为 `npm stage publish` + `npm stage approve <stage-id>`（都需要 npm >= 11.15，并用 2FA 审批）；未审批的 staged 版本不会公开，可在 npmjs.com 的 Staged Packages 页面 Approve 或 Reject。
 
 7. 在 GitHub `Releases` 创建对应 tag 的 release，**把 CHANGELOG 里该版本的内容复制到 release notes**，并上传 `release/diff-viz-skill.zip` 作为 asset。
 8. 确认 CI 通过、npm 上能拉到新版本、Release 页面能下载 asset。
@@ -387,8 +389,7 @@ npm run package:skill   # 生成 release/diff-viz-skill.zip
 
 | 版本 | 主要内容 |
 | --- | --- |
-| `v0.6.1` | npm 正式发布：staged publishing 流程、`npx diff-viz-cli` / 全局安装 |
-| `v0.6.0` | 文件监听 + SSE 自动刷新、解析缓存、影响链路、节点忽略、Review 清理与权限收紧 |
+| `v0.6.0` | 首次发布到 npm；文件监听 + SSE 自动刷新、解析缓存、影响链路、节点忽略、Review 清理与权限收紧 |
 | `v0.5.0` | 界面内添加/移除仓库、生成文件自动进 `.git/info/exclude` |
 | `v0.4.0` | 版本链条、分支/tag/merge 图、历史 commit Review |
 | `v0.3.0` | 单 hub 复用、仓库切换、历史提交、后台进程管理 |

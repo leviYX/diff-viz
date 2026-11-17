@@ -8,6 +8,12 @@
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-17
+
+### Fixed
+
+- 修复 npm 首次发布流程：npm 对新包启用 staged publishing，直接 `npm publish` 只会生成 `0.0.0-stage` 占位版本且占用版本号。改用 `npm stage publish` 提交、`npm stage approve <stage-id>` 完成 2FA 审批后，`diff-viz-cli@0.6.1` 才真正发布到 npm；安装命令为 `npx diff-viz-cli` 或 `npm install -g diff-viz-cli`。
+
 ## [0.6.0] - 2026-11-17
 
 ### Added
@@ -20,7 +26,6 @@
 
 ### Changed
 
-- 首次发布到 npm（包名 `diff-viz-cli`，命令仍是 `diff-viz`）：`npx diff-viz-cli` 或 `npm install -g diff-viz-cli` 即可安装使用，不再需要 clone 仓库。`npm publish` 前会自动执行 release check、类型检查、测试和构建。
 - 影响分析默认深度从 2 提升到 3（`--impact-depth` 仍可调到 6）。
 - 状态目录按数量做 LRU 清理（默认保留最近 50 份，`DIFF_VIZ_KEEP_REVIEWS` 可调），并始终保留各仓库的 `lastReviewId`。
 - `~/.diff-viz` 目录收紧为 0700、Review 文件为 0600，启动时顺带修正历史文件权限。
@@ -94,7 +99,8 @@
 - 柔和亮色主题、可拖拽左右面板、MiniMap、键盘 Review 导航。
 - 已构建 `dist/`，无需安装前端依赖即可运行。
 
-[Unreleased]: https://github.com/mdhUser/diff-viz/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/mdhUser/diff-viz/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/mdhUser/diff-viz/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/mdhUser/diff-viz/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/mdhUser/diff-viz/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/mdhUser/diff-viz/compare/v0.3.0...v0.4.0

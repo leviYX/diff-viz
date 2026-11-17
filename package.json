@@ -1,7 +1,6 @@
 {
-  "name": "diff-viz",
+  "name": "diff-viz-cli",
   "version": "0.4.0",
-  "private": true,
   "type": "module",
   "description": "Local git change review visualizer: dependency topology, code diffs, impact analysis and review todos.",
   "bin": {
@@ -11,8 +10,6 @@
     "bin",
     "src",
     "dist",
-    "docs",
-    "scripts",
     "SKILL.md",
     "README.md",
     "CHANGELOG.md",
@@ -27,10 +24,36 @@
     "package:skill": "node scripts/build-skill-package.mjs",
     "release:check": "node scripts/check-changelog.mjs"
   },
+  "keywords": [
+    "git",
+    "diff",
+    "code-review",
+    "dependency-graph",
+    "impact-analysis",
+    "visualization",
+    "cli",
+    "agent-skill",
+    "typescript",
+    "python",
+    "go",
+    "java"
+  ],
+  "author": "mdhUser",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mdhUser/diff-viz.git"
+  },
+  "homepage": "https://github.com/mdhUser/diff-viz#readme",
+  "bugs": {
+    "url": "https://github.com/mdhUser/diff-viz/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=20"
   },
-  "license": "MIT",
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.5",
     "@types/dagre": "^0.7.54",

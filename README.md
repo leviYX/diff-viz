@@ -2,11 +2,12 @@
 
 [![CI](https://github.com/mdhUser/diff-viz/actions/workflows/ci.yml/badge.svg)](https://github.com/mdhUser/diff-viz/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![npm](https://img.shields.io/npm/v/diff-viz-cli.svg)](https://www.npmjs.com/package/diff-viz-cli)
 [更新日志](CHANGELOG.md)
 
 本地运行的代码变更可视化 Review 工具：读取 Git diff，静态解析文件依赖，生成可交互的变更拓扑图，并启动一个常驻本地 hub 查看改动摘要、代码 Diff 与待确认事项。hub 可复用、可切换仓库、可浏览历史提交。
 
-![diff-viz 拓扑总览](docs/overview.png)
+![diff-viz 拓扑总览](https://raw.githubusercontent.com/mdhUser/diff-viz/main/docs/overview.png)
 
 ## 为什么用它
 
@@ -35,17 +36,22 @@
 
 ## 快速开始
 
-要求：Node.js >= 20，Git 仓库。
+要求：Node.js >= 20，Git 仓库。在**任意 Git 仓库根目录**执行。
 
 ```bash
-cd diff-viz
+# 不安装，直接用（推荐）
+npx diff-viz-cli
 
-# 直接运行（dist 已构建）
-node bin/diff-viz.mjs
-
-# 或链接成全局命令
-npm link
+# 或全局安装，命令名就是 diff-viz
+npm i -g diff-viz-cli
 diff-viz
+```
+
+从源码跑（开发用，前端 dist 已随仓库提供）：
+
+```bash
+git clone https://github.com/mdhUser/diff-viz.git
+cd diff-viz && node bin/diff-viz.mjs
 ```
 
 默认行为：
@@ -59,7 +65,7 @@ diff-viz
 hub 默认把项目列表和 Review 缓存放在 `~/.diff-viz/`；如果该目录不可写（例如 Agent 沙箱），会自动落到系统临时目录。也可以显式指定：
 
 ```bash
-DIFF_VIZ_HOME=/path/to/state node bin/diff-viz.mjs
+DIFF_VIZ_HOME=/path/to/state diff-viz
 ```
 
 修改前端源码后需要重新构建：
@@ -73,33 +79,33 @@ npm run build
 
 ```bash
 # hub 管理
-node bin/diff-viz.mjs hub      # 前台启动/查看 hub
-node bin/diff-viz.mjs stop     # 停止后台 hub
+diff-viz hub      # 前台启动/查看 hub
+diff-viz stop     # 停止后台 hub
 
 # 只看已暂存
-node bin/diff-viz.mjs --staged
+diff-viz --staged
 
 # 最近一次提交
-node bin/diff-viz.mjs --last
+diff-viz --last
 
 # 指定 commit 范围（支持 A..B / A...B）
-node bin/diff-viz.mjs --range main..HEAD
+diff-viz --range main..HEAD
 
 # 与目标分支比较（自动取 merge-base）
-node bin/diff-viz.mjs --base main
+diff-viz --base main
 
 # 只生成 JSON，不开界面
-node bin/diff-viz.mjs --json-only --quiet
+diff-viz --json-only --quiet
 
 # 重新打开已有的数据文件（注册到 hub，不新起进程）
-node bin/diff-viz.mjs serve --data .diff-review-data.json
+diff-viz serve --data .diff-review-data.json
 
 # 前台启动/查看 hub，停止 hub
-node bin/diff-viz.mjs hub
-node bin/diff-viz.mjs stop
+diff-viz hub
+diff-viz stop
 
 # 把 Agent / 人工总结合并进已有数据
-node bin/diff-viz.mjs annotate \
+diff-viz annotate \
   --data .diff-review-data.json \
   --annotations .diff-review-annotations.json
 ```
@@ -150,21 +156,21 @@ node bin/diff-viz.mjs annotate \
 - 「版本链条」按提交父子关系绘制，显示 `HEAD`、分支、tag 和 merge 车道；最多加载 80 个 commit。
 - 点击任意提交节点，查看该提交的 Diff 和依赖拓扑。
 
-![版本链条](docs/version-chain.png)
+![版本链条](https://raw.githubusercontent.com/mdhUser/diff-viz/main/docs/version-chain.png)
 
 切换后 URL 会变成 `?review=...`，刷新页面仍停留在同一个 Review。
 
 ### 详情抽屉
 
-![摘要与影响](docs/summary.png)
+![摘要与影响](https://raw.githubusercontent.com/mdhUser/diff-viz/main/docs/summary.png)
 
 - **摘要与影响**：展示 `summary` / `impactAnalysis`，以及完整的上游 import、下游依赖（包括未画进图里的文件）、变更来源。
 - **代码 Diff**：默认 Unified 单栏（窄抽屉更易读），可切换双栏、完整文件；支持语法高亮、按行号定位、折叠未改动区域。
 - **待确认**：自动扫描新增行中的 TODO/FIXME/XXX/HACK/BUG，也展示 Agent 写入的 `todos`；可勾选完成、添加人工备注。
 
-![代码 Diff](docs/diff.png)
+![代码 Diff](https://raw.githubusercontent.com/mdhUser/diff-viz/main/docs/diff.png)
 
-![待确认项](docs/todos.png)
+![待确认项](https://raw.githubusercontent.com/mdhUser/diff-viz/main/docs/todos.png)
 
 快捷键：`←` / `→` 切换 Review 文件，`Esc` 关闭抽屉。
 
@@ -208,7 +214,7 @@ node bin/diff-viz.mjs annotate \
 
 完整的 Agent 使用说明见 [SKILL.md](SKILL.md)。
 
-在其他 Agent（Claude Code / Cursor / OpenAI Codex 等）中安装和使用，见 [docs/agent-integrations.md](docs/agent-integrations.md)。
+在其他 Agent（Claude Code / Cursor / OpenAI Codex 等）中安装和使用，见 [docs/agent-integrations.md](https://github.com/mdhUser/diff-viz/blob/main/docs/agent-integrations.md)。
 
 ## 数据契约
 
@@ -372,7 +378,7 @@ npm run package:skill   # 生成 release/diff-viz-skill.zip
 
 如果这个工具帮你节省了时间，欢迎微信扫码打赏，感谢支持。
 
-<img src="docs/reward-wechat.jpg" alt="微信赞赏码" width="280" />
+<img src="https://raw.githubusercontent.com/mdhUser/diff-viz/main/docs/reward-wechat.jpg" alt="微信赞赏码" width="280" />
 
 ## License
 

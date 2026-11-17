@@ -18,6 +18,11 @@
 - 历史 Review 按提交时的 Git tree 扫描依赖，而不是用当前工作区代替。
 - `GET /api/commits` 返回 `parents`、`refs` 字段。
 
+### Changed
+
+- 发布到 npm（包名 `diff-viz-cli`，命令仍是 `diff-viz`），支持 `npx diff-viz-cli` 直接运行。
+- 安装包只保留 `bin` / `src` / `dist` 与文档，不再包含 `docs/`、`scripts/`，体积从 4.6 MB 降到约 330 kB。
+
 ## [0.3.0] - 2026-11-16
 
 ### Added

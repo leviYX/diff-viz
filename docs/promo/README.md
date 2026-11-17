@@ -1,19 +1,72 @@
 # 宣传素材
 
-用于社交媒体推广 diff-viz 的现成图片与文案。改文案后可用仓库外的生成脚本重出图（Pillow 绘制）。
+用于社交媒体推广 diff-viz 的现成图片与文案。
+
+> 安装状态：npm 包 `diff-viz-cli` 已就绪但**尚未发布**。文案里的安装方式写 clone 仓库，不要写 `npx`，等发布后再统一替换。
 
 ## 图片
 
 | 文件 | 尺寸 | 用途 |
 | --- | --- | --- |
-| `01-cover.png` | 1600×900 | 封面，微博 / 朋友圈 / X 首图 |
-| `01-cover-vertical.png` | 1080×1440 | 封面，小红书 / 公众号首图 |
-| `02-topology.png` | 1600×1220 | 正文第 2 张：拓扑图 + 图例说明 |
-| `03-diff.png` | 1600×1220 | 正文第 3 张：代码 Diff + 待办 |
+| `01-cover.png` | 1600×900 | 首次发布封面（16:9） |
+| `01-cover-vertical.png` | 1080×1440 | 首次发布封面（3:4，小红书） |
+| `02-topology.png` | 1600×1220 | 拓扑图 + 图例说明 |
+| `03-diff.png` | 1600×1220 | 代码 Diff + 待办 |
+| `04-v060-cover.png` | 1600×900 | v0.6.0 更新封面（16:9） |
+| `05-impact-chain.png` | 1600×900 | 影响链路示意（depth 0 → 3） |
+| `06-whats-new-3x4.png` | 1080×1440 | v0.6.0 六项更新清单（3:4） |
 
-发布顺序建议：封面 → `02-topology.png` → `03-diff.png`，三张连起来是「是什么 → 看出什么 → 点开是什么」。
+发布顺序建议：封面 → `05-impact-chain.png` → `02-topology.png`，三张连起来是「更新了什么 → 为什么有用 → 实际长什么样」。
 
-## 通用短版
+## v0.6.0 通用短版
+
+> diff-viz 更到 v0.6.0 了，这次主要治「烦」：
+>
+> · 保存即刷新——改完不用再跑命令，图自己重算
+> · 影响链路——不只说谁受影响，还能看到 A→B→C 怎么传过去的
+> · 误报能忽略——标灰就完事，不用每次重新判断
+> · 界面里直接加仓库，不用回终端
+> · 解析加了缓存，1200 个文件从 107ms 降到 24ms
+>
+> 本地跑、零依赖、代码不上传。
+> https://github.com/mdhUser/diff-viz
+
+## v0.6.0 小红书
+
+> 标题：AI 改完代码，我终于不用手动重跑了
+>
+> 以前每次让 AI 改完，都要重新跑一遍工具才出图。
+> 现在保存就自动刷新，不到一秒拓扑图自己变。
+>
+> 这版 v0.6.0 更新了 6 件事：
+> 1️⃣ 保存即刷新（watch + SSE）
+> 2️⃣ 影响链路：A→B→C 看得见，还能点回去
+> 3️⃣ 误报一键忽略，图上标灰
+> 4️⃣ 界面里直接加仓库
+> 5️⃣ 解析缓存，1200 文件 107ms→24ms
+> 6️⃣ 缓存自动清理，状态文件收 0600
+>
+> 全部本地运行，代码不上传。
+> GitHub 搜 diff-viz（作者 mdhUser）
+>
+> #程序员 #AI编程 #代码review #开源工具 #效率工具
+
+## v0.6.0 X / Twitter
+
+> diff-viz v0.6.0 is out.
+>
+> It now watches your repo: save a file, and the graph re-renders about a second later (SSE push, no re-run).
+> Also: impact chains (A→B→C), one-click ignore for false positives, add repos from the UI, and a scan cache (1200 files: 107ms → 24ms).
+>
+> Local, zero-dep, MIT. https://github.com/mdhUser/diff-viz
+
+## 一句话版
+
+> diff-viz v0.6.0：改完代码图自己刷新，还能看到影响是怎么一层层传过来的。本地、零依赖、MIT。
+
+---
+
+## 首次发布文案（保留）
 
 > 你改的这行，谁会被搞挂？
 >
@@ -24,44 +77,3 @@
 >
 > JS/TS · Python · Go · Java，MIT 开源
 > https://github.com/mdhUser/diff-viz
-
-## 小红书
-
-> 标题：AI 写完的代码，我再也不敢直接合了
->
-> 不是不信 AI，是它一口气改 10 个文件，
-> 我根本不知道牵动了哪个模块。
->
-> 所以写了个小工具 diff-viz：
-> 🟢 绿=新增　🟡 黄=修改　🔴 红=删除
-> 🟣 虚线=没改、但被影响的下游文件
-> 👉 点开任意节点，直接看代码 Diff 和待办
->
-> 本地跑，代码不上传，零运行时依赖。
-> JS/TS、Python、Go、Java 都能解析。
->
-> GitHub 搜 diff-viz（作者 mdhUser），MIT 开源。
->
-> #程序员 #代码review #AI编程 #开源工具 #效率工具
-
-## X / Twitter
-
-> Reviewing AI-written code in a terminal is guesswork.
->
-> diff-viz turns a git diff into a dependency graph: what changed, what it breaks downstream, and where the TODOs are.
->
-> Local · zero-dep · one command · JS/TS, Python, Go, Java · MIT
-> https://github.com/mdhUser/diff-viz
-
-## 开发者社区（即刻 / V2EX / 掘金）
-
-> 每次让 AI 改完代码，我都要在终端里翻半天 diff，还是不知道有没有碰到别的模块。
->
-> 所以写了 diff-viz：`git diff` → 依赖拓扑 → 点开看代码 Diff 和待办。一个常驻进程复用，能切仓库、翻历史提交和版本链。已支持 JS/TS、Python、Go、Java，本地运行，代码不出机器。
->
-> 现在 v0.4.0，MIT。
-> https://github.com/mdhUser/diff-viz
-
-## 一句话版
-
-> diff-viz：把 git diff 摊成依赖拓扑图——改了谁、牵连谁、还剩几个待办，一眼看完。本地、零依赖、MIT。

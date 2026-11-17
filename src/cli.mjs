@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { findRepoRoot, GitRepo } from './git.mjs';
+import { ensureGitExcluded, findRepoRoot, GitRepo } from './git.mjs';
 import { applyAnnotations, buildReviewData, mergePreviousState } from './collect.mjs';
 import { ensureHub, hubIsAlive, readHubInfo, startHub, stopHub } from './hub.mjs';
 import { openInBrowser } from './server.mjs';
@@ -132,6 +132,18 @@ function dataPathFor(repo, options) {
   return path.join(repo.root, '.diff-review-data.json');
 }
 
+// Keep the generated data file out of `git status`. Writing to .git/info/exclude
+// avoids touching the user's .gitignore, so nothing shows up in their diff.
+function hideDataFile(repo, dataPath) {
+  const relative = path.relative(repo.root, dataPath);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return;
+  try {
+    ensureGitExcluded(repo.root, relative);
+  } catch {
+    /* never fail a review because of an unwritable exclude file */
+  }
+}
+
 function readAnnotations(filePath) {
   if (filePath === '-') {
     try {
@@ -243,6 +255,7 @@ export async function main(argv = process.argv.slice(2)) {
     if (options.summary) data.meta.overallSummary = options.summary;
     data.meta.updatedAt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
     writeJsonAtomic(dataPath, data);
+    hideDataFile(repo, dataPath);
     const hub = readHubInfo();
     if (hub && (await hubIsAlive(hub))) {
       const hubHost = hub.host === '0.0.0.0' || hub.host === '::' ? '127.0.0.1' : hub.host;
@@ -313,6 +326,7 @@ export async function main(argv = process.argv.slice(2)) {
   mergePreviousState(data, previous);
   if (options.summary) data.meta.overallSummary = options.summary;
   writeJsonAtomic(dataPath, data);
+  hideDataFile(repo, dataPath);
 
   if (!options.quiet && !options.jsonOnly) printSummary(data, dataPath);
 

@@ -281,19 +281,22 @@ export function App() {
     };
   }, [fetchReview, hydrateData]);
 
+  const refreshProjects = useCallback(async () => {
+    try {
+      const response = await fetch('/api/hub', { cache: 'no-store' });
+      if (!response.ok) return;
+      const payload = (await response.json()) as { projects?: HubProject[] };
+      setProjects(payload.projects ?? []);
+    } catch {
+      /* keep the last known list */
+    }
+  }, []);
+
   const openRepoPanel = useCallback(async () => {
     setSwitchError(null);
     setRepoPanelOpen(true);
-    try {
-      const response = await fetch('/api/hub', { cache: 'no-store' });
-      if (response.ok) {
-        const payload = (await response.json()) as { projects?: HubProject[] };
-        setProjects(payload.projects ?? []);
-      }
-    } catch {
-      /* panel still shows the last known list */
-    }
-  }, []);
+    await refreshProjects();
+  }, [refreshProjects]);
 
   const refreshReview = useCallback(async () => {
     if (!currentReviewId) return;
@@ -716,6 +719,7 @@ export function App() {
         onOpenWorktree={(projectId) => {
           void requestReview({ projectId, scope: 'worktree' });
         }}
+        onRefreshProjects={refreshProjects}
         onOpenCommit={(projectId, commit) => {
           void requestReview({ projectId, scope: 'commit', commit: commit.sha });
         }}

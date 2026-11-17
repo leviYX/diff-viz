@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { GitRepo } from './git.mjs';
+import { GitRepo, findRepoRoot } from './git.mjs';
 import { buildReviewData, mergePreviousState } from './collect.mjs';
 import { updateReviewState, openInBrowser } from './server.mjs';
 import { formatTimestamp, readJsonSafe, shortId, writeJsonAtomic } from './util.mjs';
@@ -216,7 +216,22 @@ export async function startHub({
 
   const registerProject = (rootInput) => {
     if (!rootInput) throw new Error('缺少仓库路径。');
-    const repo = new GitRepo(normalizeRoot(rootInput));
+    const candidate = normalizeRoot(rootInput);
+    let stat = null;
+    try {
+      stat = fs.statSync(candidate);
+    } catch {
+      throw new Error(`目录不存在：${candidate}`);
+    }
+    if (!stat.isDirectory()) throw new Error(`不是目录：${candidate}`);
+    let top = '';
+    try {
+      top = findRepoRoot(candidate);
+    } catch {
+      throw new Error(`不是 Git 仓库：${candidate}`);
+    }
+    if (!top) throw new Error(`不是 Git 仓库：${candidate}`);
+    const repo = new GitRepo(normalizeRoot(top));
     const root = normalizeRoot(repo.root);
     const id = shortId(root, 12);
     const existing = projects.get(id);
@@ -231,6 +246,13 @@ export async function startHub({
     projects.set(id, project);
     saveProjects();
     return project;
+  };
+
+  const removeProject = (id) => {
+    if (!id || !projects.has(id)) return false;
+    projects.delete(id);
+    saveProjects();
+    return true;
   };
 
   const getProject = (idInput) => {
@@ -355,6 +377,23 @@ export async function startHub({
             };
           });
         sendJson(res, 200, { ok: true, commits, all });
+        return;
+      }
+
+      if (pathname === '/api/projects' && req.method === 'POST') {
+        const payload = await readBody(req);
+        const project = registerProject(payload.root);
+        sendJson(res, 200, { ok: true, project });
+        return;
+      }
+
+      if (pathname === '/api/projects' && req.method === 'DELETE') {
+        const id = url.searchParams.get('id');
+        if (!removeProject(id)) {
+          sendJson(res, 404, { error: `未知仓库：${id ?? '(空)'}` });
+          return;
+        }
+        sendJson(res, 200, { ok: true });
         return;
       }
 

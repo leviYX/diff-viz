@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 
@@ -29,6 +30,51 @@ export function runGit(root, args, options = {}) {
 export function findRepoRoot(startDir) {
   const { stdout } = runGit(startDir, ['rev-parse', '--show-toplevel']);
   return stdout.trim();
+}
+
+export function gitPath(root, relative) {
+  const result = runGit(root, ['rev-parse', '--git-path', relative], { allowFailure: true });
+  const value = result.stdout.trim();
+  if (result.status !== 0 || !value) return null;
+  return path.isAbsolute(value) ? value : path.resolve(root, value);
+}
+
+export function isIgnored(root, relativePath) {
+  const result = runGit(root, ['check-ignore', '-q', '--', relativePath], { allowFailure: true });
+  return result.status === 0;
+}
+
+// Make a generated file invisible to `git status` without touching the user's
+// .gitignore (and therefore without creating a commit). `.git/info/exclude` is
+// local to the clone and works for worktrees too, since we ask Git for the path.
+export function ensureGitExcluded(root, relativePath) {
+  const rel = relativePath.split(path.sep).join('/');
+  if (!rel || rel.startsWith('..')) return { changed: false, reason: 'outside' };
+  if (isIgnored(root, rel)) return { changed: false, reason: 'already' };
+
+  const pattern = `/${rel}`;
+  const candidates = [gitPath(root, 'info/exclude'), path.join(root, '.git', 'info', 'exclude')].filter(
+    Boolean,
+  );
+
+  for (const file of candidates) {
+    try {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      const existing = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+      const listed = existing
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .some((line) => line === pattern || line === rel);
+      if (!listed) {
+        const prefix = existing && !existing.endsWith('\n') ? '\n' : '';
+        fs.appendFileSync(file, `${prefix}${pattern}\n`);
+      }
+      if (isIgnored(root, rel)) return { changed: !listed, file };
+    } catch {
+      /* try the next candidate */
+    }
+  }
+  return { changed: false, reason: 'failed' };
 }
 
 export class GitRepo {

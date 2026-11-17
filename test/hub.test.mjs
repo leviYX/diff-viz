@@ -74,3 +74,58 @@ test('hub registers projects, serves data, lists commits and builds historical r
     fs.rmSync(home, { recursive: true, force: true });
   }
 });
+
+test('projects can be added by path, validated, deduplicated and removed', async () => {
+  const repoDir = makeTempRepo();
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'diff-viz-hub-'));
+  const plainDir = fs.mkdtempSync(path.join(os.tmpdir(), 'diff-viz-plain-'));
+  write(repoDir, 'app.ts', 'export const app = 1;\n');
+  commitAll(repoDir, 'init');
+  fs.mkdirSync(path.join(repoDir, 'src'));
+
+  const server = await startHub({ port: 0, host: '127.0.0.1', open: false, quiet: true, home });
+  try {
+    const add = (root) =>
+      fetch(`${server.url}api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ root }),
+      });
+
+    const added = await add(repoDir).then((response) => response.json());
+    assert.equal(added.ok, true);
+    assert.equal(added.project.root, fs.realpathSync(repoDir));
+    assert.equal(added.project.name, path.basename(repoDir));
+
+    // a subdirectory resolves to the repository root and keeps the same id
+    const nested = await add(path.join(repoDir, 'src')).then((response) => response.json());
+    assert.equal(nested.project.id, added.project.id);
+
+    const hub = await fetch(`${server.url}api/hub`).then((response) => response.json());
+    assert.equal(hub.projects.length, 1);
+
+    const missing = await add(path.join(os.tmpdir(), 'diff-viz-definitely-missing'));
+    assert.equal(missing.status, 500);
+    assert.match((await missing.json()).error, /目录不存在/);
+
+    const notRepo = await add(plainDir);
+    assert.equal(notRepo.status, 500);
+    assert.match((await notRepo.json()).error, /不是 Git 仓库/);
+
+    const removed = await fetch(`${server.url}api/projects?id=${added.project.id}`, {
+      method: 'DELETE',
+    }).then((response) => response.json());
+    assert.equal(removed.ok, true);
+
+    const empty = await fetch(`${server.url}api/hub`).then((response) => response.json());
+    assert.equal(empty.projects.length, 0);
+
+    const missingDelete = await fetch(`${server.url}api/projects?id=nope`, { method: 'DELETE' });
+    assert.equal(missingDelete.status, 404);
+  } finally {
+    await server.close();
+    cleanup(repoDir);
+    cleanup(plainDir);
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});

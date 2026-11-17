@@ -5,6 +5,7 @@ import {
   GitBranch,
   History,
   Loader2,
+  Plus,
   RefreshCw,
   X,
 } from 'lucide-react';
@@ -22,6 +23,7 @@ interface RepoPanelProps {
   onClose: () => void;
   onOpenWorktree: (projectId: string) => void;
   onOpenCommit: (projectId: string, commit: CommitInfo) => void;
+  onRefreshProjects: () => Promise<void> | void;
 }
 
 export function RepoPanel({
@@ -34,11 +36,59 @@ export function RepoPanel({
   onClose,
   onOpenWorktree,
   onOpenCommit,
+  onRefreshProjects,
 }: RepoPanelProps) {
   const [selectedId, setSelectedId] = useState(currentProjectId ?? projects[0]?.id ?? '');
   const [commits, setCommits] = useState<CommitInfo[]>([]);
   const [loadingCommits, setLoadingCommits] = useState(false);
   const [commitsError, setCommitsError] = useState<string | null>(null);
+  const [newRoot, setNewRoot] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+
+  const addProject = async () => {
+    const root = newRoot.trim();
+    if (!root || adding) return;
+    setAdding(true);
+    setAddError(null);
+    try {
+      const response = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ root }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        project?: HubProject;
+        error?: string;
+      };
+      if (!response.ok || !payload.project) {
+        throw new Error(payload.error ?? `HTTP ${response.status}`);
+      }
+      setNewRoot('');
+      setSelectedId(payload.project.id);
+      await onRefreshProjects();
+    } catch (error) {
+      setAddError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const removeProject = async (projectId: string) => {
+    setAddError(null);
+    try {
+      const response = await fetch(`/api/projects?id=${encodeURIComponent(projectId)}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error ?? `HTTP ${response.status}`);
+      }
+      await onRefreshProjects();
+    } catch (error) {
+      setAddError(error instanceof Error ? error.message : String(error));
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -90,16 +140,16 @@ export function RepoPanel({
           <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
             {projects.length === 0 ? (
               <div className="px-2 py-6 text-[10.5px] leading-5 text-mist-500">
-                还没有仓库。先在目标仓库运行一次 <code className="font-mono">diff-viz</code>。
+                还没有仓库。在下面填仓库绝对路径添加，或在目标仓库运行一次 <code className="font-mono">diff-viz</code>。
               </div>
             ) : (
               projects.map((project) => (
+                <div key={project.id} className="group relative mb-1">
                 <button
-                  key={project.id}
                   type="button"
                   onClick={() => setSelectedId(project.id)}
                   className={cn(
-                    'mb-1 flex w-full items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition',
+                    'flex w-full items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition',
                     project.id === selectedId
                       ? 'border-accent/25 bg-accent-soft'
                       : 'border-transparent hover:bg-ink-800/70',
@@ -119,9 +169,50 @@ export function RepoPanel({
                   </span>
                   {project.id === currentProjectId ? <Check size={11} className="shrink-0 text-mint" /> : null}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => void removeProject(project.id)}
+                  aria-label={`移除 ${project.name}`}
+                  title="从列表移除"
+                  className="absolute right-1 top-1 hidden h-4 w-4 items-center justify-center rounded bg-[#fffdf8] text-mist-600 transition hover:text-rose group-hover:flex"
+                >
+                  <X size={9} />
+                </button>
+                </div>
               ))
             )}
           </div>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void addProject();
+            }}
+            className="border-t border-line/80 px-2 py-2"
+          >
+            <div className="flex items-center gap-1">
+              <input
+                value={newRoot}
+                onChange={(event) => {
+                  setNewRoot(event.target.value);
+                  setAddError(null);
+                }}
+                placeholder="/绝对路径/到/git/仓库"
+                spellCheck={false}
+                className="min-w-0 flex-1 rounded-md border border-line bg-ink-900 px-2 py-1 font-mono text-[9.5px] text-mist-200 outline-none transition placeholder:text-mist-600 focus:border-accent/40"
+              />
+              <button
+                type="submit"
+                disabled={!newRoot.trim() || adding}
+                aria-label="添加仓库"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-accent/25 bg-accent-soft text-accent-bright transition hover:bg-accent/15 disabled:opacity-40"
+              >
+                {adding ? <Loader2 size={11} className="animate-spin" /> : <Plus size={12} />}
+              </button>
+            </div>
+            {addError ? (
+              <div className="mt-1 break-words px-0.5 text-[9px] leading-4 text-rose">{addError}</div>
+            ) : null}
+          </form>
         </div>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">

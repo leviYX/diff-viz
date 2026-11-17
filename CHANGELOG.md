@@ -8,6 +8,8 @@
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-17
+
 ### Added
 
 - `diff-viz skill install`：把薄 `SKILL.md` 注册到 DSH / Claude Code / Cursor / 共享 agents 技能目录，支持 `--agent`、`--scope user|project`、`--dir`、`--copy`、`--force`、`--dry-run`。
@@ -104,7 +106,8 @@
 - 柔和亮色主题、可拖拽左右面板、MiniMap、键盘 Review 导航。
 - 已构建 `dist/`，无需安装前端依赖即可运行。
 
-[Unreleased]: https://github.com/mdhUser/diff-viz/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/mdhUser/diff-viz/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/mdhUser/diff-viz/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/mdhUser/diff-viz/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/mdhUser/diff-viz/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/mdhUser/diff-viz/compare/v0.3.0...v0.4.0

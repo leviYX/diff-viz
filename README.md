@@ -410,6 +410,7 @@ npm run package:skill:standalone  # 可选：离线自包含包（含 bin/src/di
 
 | 版本 | 主要内容 |
 | --- | --- |
+| `v0.6.1` | 薄 skill 安装（`diff-viz skill install`）、SKILL.md 与 CLI 解耦、thin/standalone 打包 |
 | `v0.6.0` | 首次发布到 npm；文件监听 + SSE 自动刷新、解析缓存、影响链路、节点忽略、Review 清理与权限收紧 |
 | `v0.5.0` | 界面内添加/移除仓库、生成文件自动进 `.git/info/exclude` |
 | `v0.4.0` | 版本链条、分支/tag/merge 图、历史 commit Review |

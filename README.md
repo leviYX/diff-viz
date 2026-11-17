@@ -41,20 +41,17 @@
 要求：Node.js >= 20，Git 仓库。在**任意 Git 仓库根目录**执行。
 
 ```bash
-# 不安装，直接用（推荐）
-npx diff-viz-cli
-
-# 或全局安装，命令名就是 diff-viz
-npm i -g diff-viz-cli
-diff-viz
-```
-
-从源码跑（开发用，前端 dist 已随仓库提供）：
-
-```bash
 git clone https://github.com/mdhUser/diff-viz.git
-cd diff-viz && node bin/diff-viz.mjs
+cd diff-viz
+
+# 在目标仓库里运行（dist 已随仓库提供，不需要 npm install）
+node /path/to/diff-viz/bin/diff-viz.mjs
+
+# 或链接成全局命令，之后在任意仓库直接用 diff-viz
+npm link
 ```
+
+> npm 包 `diff-viz-cli` 已就绪但尚未发布；发布后可直接 `npx diff-viz-cli`。
 
 默认行为：
 

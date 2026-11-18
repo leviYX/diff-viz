@@ -7,15 +7,27 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: test (${{ matrix.os }}, node ${{ matrix.node }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [20]
+        include:
+          # Newest LTS only needs one platform; the goal is OS coverage.
+          - os: ubuntu-latest
+            node: 24
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
       - run: npm run release:check
       - run: npm run typecheck
       - run: npm test
-      - run: npm run build
+      # dist is build output for the published tarball; building once is enough.
+      - if: matrix.os == 'ubuntu-latest' && matrix.node == 20
+        run: npm run build

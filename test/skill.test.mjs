@@ -45,7 +45,7 @@ test('installs a symlinked thin skill and is idempotent', () => {
   try {
     const result = installSkill({ source, dir, cwd: dir });
     assert.equal(result.status, 'installed');
-    assert.equal(result.method, 'symlink');
+    assert.equal(result.method, process.platform === 'win32' ? 'copy' : 'symlink');
     assert.ok(fs.lstatSync(result.target).isSymbolicLink());
     assert.equal(path.resolve(path.dirname(result.target), fs.readlinkSync(result.target)), source);
     assert.equal(

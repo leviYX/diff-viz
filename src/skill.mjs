@@ -107,6 +107,9 @@ export function installSkill({
   const sourcePath = path.resolve(source);
   if (!fs.existsSync(sourcePath)) throw new Error(`找不到 SKILL.md：${sourcePath}`);
 
+  // Windows needs developer mode for symlinks, so copy there by default.
+  const preferCopy = copy || process.platform === 'win32';
+
   const target = skillTargetPath({ agent, scope, dir, cwd });
   const targetDir = path.dirname(target);
   const existing = lstatSafe(target);
@@ -118,7 +121,7 @@ export function installSkill({
       if (linked === sourcePath) {
         return { status: 'unchanged', target, method: 'symlink', agent, scope };
       }
-    } else if (existing.isFile() && copy) {
+    } else if (existing.isFile() && preferCopy) {
       const same = fs.readFileSync(target, 'utf8') === fs.readFileSync(sourcePath, 'utf8');
       if (same) {
         return { status: 'unchanged', target, method: 'copy', agent, scope };
@@ -130,7 +133,7 @@ export function installSkill({
   }
 
   if (dryRun) {
-    return { status: 'dry-run', target, method: copy ? 'copy' : 'symlink', agent, scope };
+    return { status: 'dry-run', target, method: preferCopy ? 'copy' : 'symlink', agent, scope };
   }
 
   // Replacing an old self-contained skill should remove its bin/src/dist too,
@@ -140,8 +143,8 @@ export function installSkill({
   }
 
   fs.mkdirSync(targetDir, { recursive: true });
-  let method = copy ? 'copy' : 'symlink';
-  if (copy) {
+  let method = preferCopy ? 'copy' : 'symlink';
+  if (preferCopy) {
     fs.copyFileSync(sourcePath, target);
   } else {
     try {

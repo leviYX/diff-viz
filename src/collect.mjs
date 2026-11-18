@@ -3,6 +3,7 @@ import path from 'node:path';
 import { GitRepo } from './git.mjs';
 import { parseUnifiedDiff, extractTodosFromAddedLines } from './diff-parse.mjs';
 import { createResolver, languageOf, scanRepository } from './deps.mjs';
+import { loadLanguageSpecs, registryFor } from './languages.mjs';
 import {
   clampText,
   formatTimestamp,
@@ -374,6 +375,27 @@ export function collectChangeSet(repo, options = {}) {
   return { scope, files: parsed.files, warnings };
 }
 
+// Extra languages come from --languages <file>, or from the project's own
+// .diff-viz/languages.json. A broken config fails loudly instead of silently
+// dropping dependency edges.
+function loadRegistry(root, option) {
+  const configured = Array.isArray(option) ? option : null;
+  if (configured) return registryFor(configured);
+  const explicit = Boolean(option);
+  const file = explicit
+    ? path.resolve(process.cwd(), String(option))
+    : path.join(root, '.diff-viz', 'languages.json');
+  if (!fs.existsSync(file)) {
+    if (explicit) throw new Error(`语言配置不存在：${file}`);
+    return registryFor([]);
+  }
+  try {
+    return registryFor(loadLanguageSpecs(file));
+  } catch (error) {
+    throw new Error(`语言配置读取失败（${file}）：${error.message}`);
+  }
+}
+
 export function buildReviewData(repo, options = {}) {
   const startedAt = Date.now();
   const { scope, files: parsedFiles, warnings } = collectChangeSet(repo, options);
@@ -411,10 +433,12 @@ export function buildReviewData(repo, options = {}) {
   }
 
   const scanRef = options.scanRef ?? (scope.mode === 'rev' ? scope.newRef : null);
+  const registry = loadRegistry(repo.root, options.languages);
   const scan = scanRepository(repo, {
     includeUntracked: !scanRef && options.untracked !== false,
     maxFiles: options.maxScanFiles ?? 15000,
     gitRef: scanRef,
+    registry,
   });
   warnings.push(...scan.warnings);
 
@@ -440,6 +464,8 @@ export function buildReviewData(repo, options = {}) {
     workspacePackages: scan.workspacePackages,
     javaIndex: scan.javaIndex,
     oldPathAliases,
+    registry,
+    packageIndexes: scan.packageIndexes,
   });
 
   const resolvedImports = new Map();

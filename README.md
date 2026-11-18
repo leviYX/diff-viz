@@ -22,7 +22,7 @@
 ## 功能
 
 - **变更提取**：工作区（暂存 + 未暂存）、暂存区、最近一次提交、commit range、与目标分支对比。
-- **依赖拓扑**：静态解析 JS/TS（含 `tsconfig` 的 `baseUrl` / `paths` 别名）、Python、Go、Java 的 import，构建 Nodes / Edges。
+- **依赖拓扑**：静态解析 JS/TS（含 `tsconfig` 的 `baseUrl` / `paths` 别名）、Python、Go、Java、Rust、Kotlin、C#、Ruby 的 import，构建 Nodes / Edges；支持用 `.diff-viz/languages.json` 增加自定义语言。
 - **状态区分**：新增（绿）、修改（黄）、删除（红）、受影响但未改动（灰色虚线）。
 - **Review 流程**：按依赖顺序给出 reviewOrder，`←` / `→` 逐个文件切换，标记已 Review；与本次改动无关的文件可以「忽略」，在图上弱化显示。
 - **影响链路**：每个受影响文件记录 `impactChain`，详情里能看到「A → B → C → D」是怎么传播过来的。
@@ -113,6 +113,7 @@ diff-viz annotate \
 | `--data <file>` | 数据文件路径，默认 `<repo>/.diff-review-data.json` |
 | `--annotations <file>` | 生成时合并注解 JSON |
 | `--node <path>` | 仅用于 `annotate`：只更新指定节点的注解 |
+| `--languages <file>` | 额外语言定义 JSON，默认读取 `<repo>/.diff-viz/languages.json` |
 | `--summary <text>` | 覆盖整体摘要 |
 | `--impact-depth <n>` | 下游影响深度，默认 3（最多 6） |
 | `--max-impact <n>` | 最多展示受影响文件数，默认 120 |
@@ -290,6 +291,34 @@ diff-viz skill install --dir ~/.config/my-agent/skills --copy
 | Python | `import a.b`、`from a.b import x`、相对 import | 仓库根目录与 `src/`，`module.py` / `module/__init__.py` |
 | Go | `import "..."`、import block | `go.mod` 的 module 前缀 → 目录下的 `.go` 文件 |
 | Java | `import com.foo.Bar;`、`import static ...`、`import com.foo.*`、同包类引用 | 按 `package` + 文件名建立 FQCN 索引，支持 Maven/Gradle 的 `src/main/java`、多模块目录 |
+| Kotlin | `import com.foo.Bar`、`import com.foo.*` | 同 `package` + 文件名索引；忽略 `kotlin.*` / `java.*` / `androidx.*` 等标准库 |
+| C# | `using Acme.Services;`、`using static ...` | 按 `namespace` + 文件名索引，先匹配命名空间再匹配类；忽略 `System.*` / `Microsoft.*` |
+| Rust | `mod foo;`、`use crate::a::b::C;`、`super::` / `self::` | `foo.rs` / `foo/mod.rs`；`crate::` 映射到 `src/`，逐段回退到最近的模块文件 |
+| Ruby | `require_relative 'x'`、`require 'x'` | 相对当前文件解析，或按 `lib/`、仓库根目录查找 `x.rb` / `x/index.rb` |
+| 自定义 | 由 `.diff-viz/languages.json` 定义的 `importPatterns` | `strategy` 可选 `package`（声明式包 + 文件名）或 `relative`（相对路径） |
+
+### 自定义语言
+
+仓库里放 `.diff-viz/languages.json`（或用 `--languages <file>` 指定）即可注册新语言，不需要改代码：
+
+```json
+{
+  "languages": [
+    {
+      "id": "foo",
+      "label": "Foo",
+      "extensions": [".foo"],
+      "strategy": "package",
+      "packagePattern": "^package ([\\w.]+)",
+      "importPatterns": ["^use ([\\w.]+)"]
+    }
+  ]
+}
+```
+
+- `strategy: "package"` —— 文件头声明包名，import 写成 `包名.文件名`（Kotlin / C# 这类）；`packagePattern` 用第一个捕获组取包名。
+- `strategy: "relative"` —— import 是相对路径（Ruby 这类），用 `indexNames` 指定目录入口文件名。
+- `ignorePrefixes` 可排除标准库命名空间。配置写错会直接报错，不会静默丢边。
 
 影响分析从每个变更文件出发，沿 `被 import` 的反向关系寻找下游文件，最多 `--impact-depth` 层（默认 3）、`--max-impact` 个节点，并为每个受影响文件记录 `impactChain`，详情里能看到「A → B → C」的传播路径。只展示仓库内文件；`node_modules`、`vendor`、`dist` 等目录会被跳过。
 
@@ -311,6 +340,7 @@ diff-viz/
 │   ├── diff-parse.mjs      # unified diff 解析 / TODO 扫描
 │   ├── deps.mjs            # JS/TS、Python、Go、Java import 解析 + 扫描缓存
 │   ├── cache.mjs           # 文件级解析缓存（mtime + size）
+│   ├── languages.mjs       # 语言注册表（内置 + 自定义语言）
 │   ├── git.mjs             # Git 命令封装、.git/info/exclude 写入
 │   ├── hub.mjs             # 常驻 hub：仓库注册、历史 Review、watch/SSE、状态 API
 │   ├── server.mjs          # 单 Review HTTP 服务（兼容/测试）

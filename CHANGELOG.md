@@ -8,6 +8,18 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-18
+
+### Added
+
+- Rust / Kotlin / C# / Ruby 依赖解析：`mod` 与 `use crate::…` 映射到 `.rs` / `mod.rs`，`import` 与 `using` 按声明的包名或命名空间 + 文件名索引，`require_relative` 按相对路径解析。
+- `.diff-viz/languages.json`（或 `--languages <file>`）：用声明式 JSON 注册自定义语言，支持 `package` / `relative` 两种解析策略和 `ignorePrefixes` 过滤标准库。
+- 依赖解析改为按语言注册表分发，加语言不需要再动扫描器。
+
+### Changed
+
+- 语言配置写错或文件不存在时直接报错，不再静默退化成「没有依赖边」。
+
 ## [0.6.1] - 2026-11-17
 
 ### Added

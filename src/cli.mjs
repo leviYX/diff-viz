@@ -32,6 +32,7 @@ diff-viz · 本地代码变更可视化 Review 工具
   --data <file>           数据文件路径 (默认 <repo>/.diff-review-data.json)
   --annotations <file>    生成时合并注解文件 (JSON，见 SKILL.md)
   --node <path>           annotate 时只更新指定节点
+  --languages <file>      额外语言定义 JSON（也可放 <repo>/.diff-viz/languages.json）
   --summary <text>        覆盖整体摘要
   --json-only             仅生成 JSON，不启动界面
   --port <n>              hub 端口 (默认 5173，被占用时自动 +1)
@@ -104,6 +105,7 @@ const VALUE_FLAGS = new Set([
   'max-impact',
   'repo',
   'node',
+  'languages',
 ]);
 
 function toCamel(name) {
@@ -432,6 +434,7 @@ export async function main(argv = process.argv.slice(2)) {
     untracked: options.untracked,
     summary: options.summary,
     annotationFile: options.annotations ? path.resolve(process.cwd(), options.annotations) : null,
+    languages: options.languages || null,
     excludePaths: [
       dataPath,
       options.annotations && options.annotations !== '-'

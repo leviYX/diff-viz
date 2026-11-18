@@ -214,6 +214,10 @@ hub 的状态目录默认是 `~/.diff-viz/`；Agent 沙箱不允许写 home 时�
 - Python：`import`、`from ... import`、相对 import。
 - Go：单行/块状 import，基于 `go.mod` module 前缀解析本地包。
 - Java：`import`、`import static`、包通配符 import，以及同包类引用；按 `package` + 文件名解析 FQCN，适配 Maven/Gradle 目录。
+- Kotlin / C#：`import` / `using`，按声明的包名或命名空间 + 文件名索引解析。
+- Rust：`mod`、`use`（含 `crate::` / `super::` / `self::`）。
+- Ruby：`require_relative` / `require`。
+- 其他语言：在仓库放 `.diff-viz/languages.json`，或用 `--languages <file>` 指定，声明扩展名、import 正则和解析策略即可。
 - 其他文件仍会作为变更节点展示，只是没有依赖边。
 
 ## 故障排查

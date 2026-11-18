@@ -5,6 +5,10 @@ const LABELS: Record<string, string> = {
   jsx: 'JSX',
   python: 'Python',
   go: 'Go',
+  rust: 'Rust',
+  kotlin: 'Kotlin',
+  csharp: 'C#',
+  ruby: 'Ruby',
   java: 'Java',
   json: 'JSON',
   markdown: 'Markdown',
@@ -17,7 +21,6 @@ const LABELS: Record<string, string> = {
   bash: 'Shell',
   sql: 'SQL',
   toml: 'TOML',
-  rust: 'Rust',
   text: 'Text',
 };
 

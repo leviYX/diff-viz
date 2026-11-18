@@ -2,6 +2,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { isProbablyBinary, naturalCompare, readJsonSafe, toPosix } from './util.mjs';
 import { readScanCache, writeScanCache } from './cache.mjs';
+import {
+  EMPTY_REGISTRY,
+  buildPackageIndexes,
+  extractWithSpec,
+  packageNameOf,
+  resolveForSpec,
+  specForFile,
+} from './languages.mjs';
 
 const JS_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs', '.vue', '.svelte'];
 const JS_EXTENSION_SET = new Set(JS_EXTENSIONS);
@@ -88,18 +96,26 @@ export function languageOf(filePath) {
       return 'toml';
     case '.rs':
       return 'rust';
+    case '.kt':
+    case '.kts':
+      return 'kotlin';
+    case '.cs':
+      return 'csharp';
+    case '.rb':
+      return 'ruby';
     default:
       return 'text';
   }
 }
 
-export function isCodeFile(filePath) {
+export function isCodeFile(filePath, registry = EMPTY_REGISTRY) {
   const ext = extensionOf(filePath);
   return (
     JS_EXTENSION_SET.has(ext) ||
     PY_EXTENSION_SET.has(ext) ||
     GO_EXTENSION_SET.has(ext) ||
-    JAVA_EXTENSION_SET.has(ext)
+    JAVA_EXTENSION_SET.has(ext) ||
+    registry.hasExtension(ext)
   );
 }
 
@@ -314,12 +330,14 @@ export function extractJavaImports(source) {
   return imports;
 }
 
-export function extractImports(filePath, source) {
+export function extractImports(filePath, source, registry = EMPTY_REGISTRY) {
   const ext = extensionOf(filePath);
   if (JS_EXTENSION_SET.has(ext)) return extractJsImports(source);
   if (PY_EXTENSION_SET.has(ext)) return extractPythonImports(source);
   if (GO_EXTENSION_SET.has(ext)) return extractGoImports(source);
   if (JAVA_EXTENSION_SET.has(ext)) return extractJavaImports(source);
+  const spec = registry.specForExtension(ext);
+  if (spec) return extractWithSpec(spec, source);
   return [];
 }
 
@@ -454,6 +472,8 @@ export function createResolver({
   workspacePackages = new Map(),
   javaIndex = { classes: new Map(), packages: new Map() },
   oldPathAliases = new Map(),
+  registry = EMPTY_REGISTRY,
+  packageIndexes = new Map(),
 }) {
   const pythonRoots = ['', 'src', 'lib'].filter((prefix) => {
     if (!prefix) return true;
@@ -671,6 +691,8 @@ export function createResolver({
     if (PY_EXTENSION_SET.has(ext)) return resolvePython(fromPath, imp);
     if (GO_EXTENSION_SET.has(ext)) return resolveGo(imp.spec);
     if (JAVA_EXTENSION_SET.has(ext)) return resolveJava(imp);
+    const spec = registry.specForExtension(ext);
+    if (spec) return resolveForSpec(spec, { fromPath, imp, fileSet, indexes: packageIndexes });
     return [];
   }
 
@@ -694,7 +716,13 @@ function extractJavaIdentifiers(source) {
 
 export function scanRepository(
   repo,
-  { includeUntracked = true, maxFiles = MAX_SCAN_FILES, gitRef = null, useCache = true } = {},
+  {
+    includeUntracked = true,
+    maxFiles = MAX_SCAN_FILES,
+    gitRef = null,
+    useCache = true,
+    registry = EMPTY_REGISTRY,
+  } = {},
 ) {
   const warnings = [];
   const allFiles = gitRef
@@ -724,7 +752,7 @@ export function scanRepository(
       skippedDir += 1;
       continue;
     }
-    if (!isCodeFile(posixPath)) continue;
+    if (!isCodeFile(posixPath, registry)) continue;
     candidates.push(posixPath);
     if (candidates.length >= maxFiles) {
       warnings.push(`Dependency scan capped at ${maxFiles} code files; deeper impact analysis may be incomplete.`);
@@ -788,7 +816,12 @@ export function scanRepository(
     let source = buffer.toString('utf8');
     // Avoid pathological regex scans over generated bundles.
     if (source.length > MAX_SOURCE_BYTES) source = source.slice(0, MAX_SOURCE_BYTES);
-    const entry = { imports: extractImports(filePath, source) };
+    const entry = { imports: extractImports(filePath, source, registry) };
+    const langSpec = specForFile(filePath, registry);
+    if (langSpec) {
+      entry.langId = langSpec.id;
+      if (langSpec.strategy === 'package') entry.pkg = packageNameOf(langSpec, source);
+    }
     if (JAVA_EXTENSION_SET.has(path.extname(filePath).toLowerCase())) {
       entry.javaPackage = extractJavaPackage(source);
       entry.javaIds = extractJavaIdentifiers(source);
@@ -827,6 +860,8 @@ export function scanRepository(
 
   if (caching) writeScanCache(repo.root, { files: nextCache });
 
+  const packageIndexes = buildPackageIndexes(registry, files);
+
   if (skippedLarge > 0) warnings.push(`${skippedLarge} large code files were skipped during dependency scan.`);
 
   return {
@@ -835,6 +870,7 @@ export function scanRepository(
     goModule,
     workspacePackages,
     javaIndex,
+    packageIndexes,
     warnings,
     stats: {
       trackedFiles: allFiles.length,

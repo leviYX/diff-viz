@@ -38,6 +38,10 @@ const HIGHLIGHT_LANGUAGE: Record<string, string | undefined> = {
   jsx: 'jsx',
   python: 'python',
   go: 'go',
+  rust: 'rust',
+  kotlin: 'kotlin',
+  csharp: 'csharp',
+  ruby: 'ruby',
   java: 'java',
   json: 'json',
   markdown: 'markdown',
@@ -50,7 +54,6 @@ const HIGHLIGHT_LANGUAGE: Record<string, string | undefined> = {
   bash: 'bash',
   sql: 'sql',
   toml: 'toml',
-  rust: 'rust',
   text: undefined,
 };
 

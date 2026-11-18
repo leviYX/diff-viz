@@ -31,13 +31,11 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          npm test 2>&1 | tee test-output.log
-      - name: Surface test failures
-        if: failure()
-        shell: bash
-        run: |
-          grep -E "✖|AssertionError|Error:" test-output.log | head -8 | while IFS= read -r line; do
-            echo "::error::${line}"
+          npm test 2>&1 | while IFS= read -r line; do
+            printf '%s\n' "$line"
+            case "$line" in
+              *"✖"*|*"not ok"*) echo "::error::$(printf '%s' "$line" | head -c 600)";;
+            esac
           done
       # dist is build output for the published tarball; building once is enough.
       - if: matrix.os == 'ubuntu-latest' && matrix.node == 20

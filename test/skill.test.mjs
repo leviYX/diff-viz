@@ -16,25 +16,28 @@ function makeTempDir() {
 }
 
 test('resolves agent skill roots for user and project scope', () => {
+  // path.resolve adds the current drive on Windows, so build the expected path
+  // the same way instead of hard-coding a POSIX path.
+  const project = path.join(os.tmpdir(), 'diff-viz-project');
   assert.equal(
     resolveSkillsRoot({ agent: 'dsh', scope: 'user' }),
     path.join(os.homedir(), '.dsh', 'skills'),
   );
   assert.equal(
-    resolveSkillsRoot({ agent: 'claude', scope: 'project', cwd: '/tmp/project' }),
-    path.join('/tmp/project', '.claude', 'skills'),
+    resolveSkillsRoot({ agent: 'claude', scope: 'project', cwd: project }),
+    path.resolve(project, '.claude', 'skills'),
   );
   assert.equal(
-    resolveSkillsRoot({ agent: 'cursor', scope: 'project', cwd: '/tmp/project' }),
-    path.join('/tmp/project', '.cursor', 'skills'),
+    resolveSkillsRoot({ agent: 'cursor', scope: 'project', cwd: project }),
+    path.resolve(project, '.cursor', 'skills'),
   );
   assert.equal(
     skillTargetPath({ agent: 'agents', scope: 'user' }),
     path.join(os.homedir(), '.agents', 'skills', 'diff-viz', 'SKILL.md'),
   );
   assert.equal(
-    resolveSkillsRoot({ dir: 'custom-skills', cwd: '/tmp/project' }),
-    path.join('/tmp/project', 'custom-skills'),
+    resolveSkillsRoot({ dir: 'custom-skills', cwd: project }),
+    path.resolve(project, 'custom-skills'),
   );
   assert.throws(() => resolveSkillsRoot({ agent: 'unknown' }), /未知 agent/);
   assert.throws(() => resolveSkillsRoot({ agent: 'dsh', scope: 'global' }), /未知 scope/);
